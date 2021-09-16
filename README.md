@@ -14,3 +14,7 @@ usage: scrubber.py [-h] --infile INPUT_FILE[.EXT] [--outfile OUTPUT_FILE[.EXT]] 
                    [--forcefield_extra [uff]] [--rotamer_conf [10]] [--rotamer_steps [5]] [--nomini] [--noextra] [--norotamer] [--chargemodel [gasteiger]] [--strict]
                    [--multicore [8]] [--nice NICE] [--log LOGFILENAME] [--verbose] [--help_advanced]
 ```
+## TODO
+[ ] disable rotameric search by default
+[ ] find optimal SD/CG default parameters
+[ ] test and activate automatic heuristic for minimization parameters
