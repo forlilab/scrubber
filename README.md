@@ -19,3 +19,4 @@ usage: scrubber.py [-h] --infile INPUT_FILE[.EXT] [--outfile OUTPUT_FILE[.EXT]] 
 - [ ] disable rotameric search by default
 - [ ] find optimal SD/CG default parameters
 - [ ] test and activate automatic heuristic for minimization parameters
+- [ ] trap SIGINT signals (Ctrl-C) to send poison pills to workers and end gracefully
