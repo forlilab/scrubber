@@ -231,7 +231,7 @@ class Scrub(object):
         # print("WARNING: unset partial charge perceived disabled (OB 2->3) FIXME")
         for a in ob.OBMolAtomIter(self.mol):
             a.SetPartialCharge(0.0)
-        #self.mol.UnsetPartialChargesPerceived()
+        self.mol.SetPartialChargesPerceived(False)
         self.mol.SetAutomaticPartialCharge(False)
         report = charger.ComputeCharges(self.mol)
         c = sum([a.GetPartialCharge() for a in ob.OBMolAtomIter(self.mol)])
