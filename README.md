@@ -16,6 +16,6 @@ usage: scrubber.py [-h] --infile INPUT_FILE[.EXT] [--outfile OUTPUT_FILE[.EXT]] 
 ```
 ## TODO
 
--[ ] disable rotameric search by default
--[ ] find optimal SD/CG default parameters
--[ ] test and activate automatic heuristic for minimization parameters
+- [ ] disable rotameric search by default
+- [ ] find optimal SD/CG default parameters
+- [ ] test and activate automatic heuristic for minimization parameters
