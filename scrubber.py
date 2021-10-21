@@ -169,18 +169,9 @@ class MiniMee(object):
         self._parse_opt()
         self.start()
 
-###    def vprint(self, string, newline=True):
-###        """ verbose level printing"""
-###        if self.verbose:
-###            msg = "VERBOSE: %s" % string
-###            if newline:
-###                msg += "\n"
-###            print msg,
-
     def dprint(self, *args, **kwargs):
         if self.debug:
             print(*args, **kwargs)
-
 
     def _set_opt_defaults(self):
         """ set all predefined options"""
@@ -190,13 +181,11 @@ class MiniMee(object):
         self.default_outformat = None
         self.default_usemolname = None
         self.default_usemolnamesafe = None
-
         # slicing
         self.default_split = False
         self.default_only = False
         self.default_begin = 1
         self.default_end = None
-            
         # mol processing
         self.default_pH = 7.4
         self.default_nopH = False
@@ -209,16 +198,17 @@ class MiniMee(object):
         self.default_maxenumchiral = 10
         self.default_nomini = False
         self.default_noextra = False
-        self.default_norotamer = False
+        self.default_norotamer = True
         self.default_exclude = None
         self.default_fix_non_std_autodock = False
-
         # minimizer
         self.default_sdconv = 1e-5
         self.default_sdsteps = 300
         self.default_cgconv = 1e-6
         self.default_cgsteps = 300
         self.default_forcefield = 'mmff94s'
+        self.default_heuristics = 'quick'
+        self.default_heuristics_list = [ 'quick', 'accurate', 'long', 'extreme' ] 
 
         # extra steps
         #self.default_sdconv = 1e-9
@@ -280,12 +270,12 @@ class MiniMee(object):
         if '--help_advanced' in sys.argv:
             self.show_advanced_help()
             sys.exit(0)
-            
         self.args = self.parser.parse_args()
         # activate verbose as soon as possible, if requested
         self.verbose = self.args.verbose
         self._data = []
-
+        print("CKECKING", self.args)
+        # sys.exit(0)
 
     def print_msg(self, msg, mtype = 'e', q=None):
         """ utility to report messages """
@@ -297,14 +287,11 @@ class MiniMee(object):
         print(buff + msg + qs) 
         if mtype == 'e':
             sys.exit(1)
-        
             
     def _get_string(self,q):
         """ Base/64"""
         return ""
         return self._data[q]
-
-
 
     def _parse_opt(self):
         """ perform the parsing of options"""
@@ -392,7 +379,6 @@ class MiniMee(object):
             self.dprint( msg %  (self.infile, self.inext))
             self.informat = self.intype
 
-
     def _parse_opt_multi(self):
         """ perform the multi-structure check"""
         # check for multi-structure 
@@ -413,7 +399,6 @@ class MiniMee(object):
             msg =  'An error occurred while reading file [%s]:' % self.infile
             msg += 'I/O error (%d) : %s' % (e.errno, e.strerror)
             self.print_msg(msg)
-
     
     def _parse_opt_output(self):
         """ parse output information to determine output filename
@@ -535,12 +520,12 @@ class MiniMee(object):
     def _parse_opt_minimizer(self):
         """ minimizer parameters (forcefield, charges, minimizer steps)"""
         # get options 
+        self.automini = self.args.automini
         self.nomini = self.args.nomini
         self.noextra = self.args.noextra
         self.norotamer = self.args.norotamer
         self.rotamer_conf = self.args.rotamer_conf
         self.rotamer_steps = self.args.rotamer_steps
-
         # minimizer
         self.sdsteps = self.args.sdsteps
         self.sdconv = self.args.sdconv
@@ -600,6 +585,7 @@ class MiniMee(object):
     def _check_mini_parms(self):
         # disable minimization
         if self.nomini:
+            self.automini = None
             anysteps = ((self.sdsteps is not None and self.sdsteps > 0) or (self.cgsteps is not None and self.cgsteps > 0))
             if anysteps:
                 msg = ('Minimization disabled (--nomini) but minimizer '
@@ -724,9 +710,6 @@ class MiniMee(object):
                     '[%s], allowed:' % self.args.enumchiral.lower())
                       #  "|".join(['all', 'undefined', 'None']))
             self.print_msg(msg)
-        #else:
-        #    self.chirality = self.args.enumchiral
-        #print "SELFCHIRALITY", self.chirality
 
     def _parse_opt_exclude(self):
         """ parse and check that SMARTS patterns are valid"""
@@ -844,26 +827,6 @@ class MiniMee(object):
             return True
             
         return False
-
-
-    # def fix_non_std_autodock(self, mol):
-    #     """ swap the atom types from non-standard AD to the closest AD type"""
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     # TODO 
-    #     for atom in ob.OBMolAtomIter(mol):
-    #         pass
 
     def get_name_ext(self, fname):
         """ extract name and extension from the input file"""
@@ -1064,7 +1027,7 @@ EXAMPLES
        #       ...
               
 ====================================================	 
-%(progname)s (C)2014 Stefano Forli, MGL, TSRI 
+%(progname)s (C)2021 ForliLab, Scripps Research 
         """ % { 'progname' :self.progname,
         'pH': self.default_pH, 'charge':self.default_charges, 'forcefield':self.default_forcefield,
         'outformat': self.default_out, 'cc': cc, 'ff':ff, 'scriptname': os.path.basename(sys.argv[0]),
@@ -1144,15 +1107,23 @@ EXAMPLES
         # minimizing 
         # XXX TODO XXX TODO XXX TODO
         # provide a minimum set of values good for everything
-        '--mini_quick' : { 'help':('steepest descent max. iterations; set to 0 to disable '
-                        '(default %d).') % self.default_sdsteps, 'action': 'store', 'metavar':'[ %4g ]' % self.default_sdsteps,
-                        'type' : int, 'default' : None},
-        '--mini_std' : {},
-        '--mini_aggressive' : {},
+        # '--mini_quick' : { 'help':('steepest descent max. iterations; set to 0 to disable '
+        #                 '(default %d).') % self.default_sdsteps, 'action': 'store', 'metavar':'[ %4g ]' % self.default_sdsteps,
+        #                 'type' : int, 'default' : None},
+        # '--mini_std' : {},
+        # '--mini_aggressive' : {},
         # XXX TODO XXX TODO XXX TODO
 
-
-
+        '--automini' : { 'help':('set minimization parameters automatically basing on each'
+                            ' molecule complexity; if no argument is provided, by default \'%s\' '
+                            'settings are used; each level has 10x more energy evaluations than the previous; '
+                            'the formula used to calculate evaluations is : '
+                            '(bonds/10) * (atoms/10) * rotatable_bonds * LEVEL') % self.default_heuristics,
+                         'nargs':'?',  
+                         'action': 'store', 
+                         'const': "quick",
+                         'metavar':'%s]' % "|".join(self.default_heuristics_list),
+                        'type' : str, 'default' : None},
 
         '--sdsteps' : { 'help':('steepest descent max. iterations; set to 0 to disable '
                         '(default %d).') % self.default_sdsteps, 'action': 'store', 'metavar':'[ %4g ]' % self.default_sdsteps,
@@ -1293,7 +1264,7 @@ EXAMPLES
                             # '--fix_non_std_autodock',
                             ],
                 # minimizer 
-                'ENERGY MINIMIZATION AND FORCEFIELD PARAMETERS' : [ '--sdsteps', '--sdconv', '--cgsteps', '--cgconv', '--forcefield', 
+                'ENERGY MINIMIZATION AND FORCEFIELD PARAMETERS' : [ '--automini', '--sdsteps', '--sdconv', '--cgsteps', '--cgconv', '--forcefield', 
                              '--sdsteps_extra', '--sdconv_extra', '--cgsteps_extra', '--cgconv_extra', '--forcefield_extra', 
                              '--rotamer_conf', '--rotamer_steps',
 
@@ -1466,13 +1437,14 @@ EXAMPLES
         if not self.split:
             self.ob_mol_parser.CloseOutFile()
 
-    def heuristic_mini_parms(self, mol):
+    def heuristic_mini_parms(self, mol, level='quick'):
         """ try to guess """
+        level_settings = {'quick':1, 'accurate':10, 'long':100, 'extreme':1000} 
         rot = mol.NumRotors()
         atoms = mol.NumHvyAtoms()
         bonds = mol.NumBonds()
         print("[PARM HEURISTIC]  %s R:%d  A:%d  B:%d"% (mol.GetTitle(), rot, atoms, bonds), end=' ')
-        sdsteps = max( ( (bonds/10.) * (atoms/10.) * rot), 10)
+        sdsteps = max( ( (bonds/10.) * (atoms/10.) * rot), 10) * level_settings[level]
         cgsteps = sdsteps / 2
         sdsteps_extra = sdsteps * 0.75
         cgsteps_extra = cgsteps * 0.75
@@ -1570,12 +1542,11 @@ EXAMPLES
                     # skip by name
                     continue
                 msg = "-------------[processing mol.%d: %s]---------" 
-                # TODO !!!
-                self.heuristic_mini_parms(mol)
-                if 1:
-                    #print("\n\nGUESSING PARMS!!!!\n\n")
-                    self.heuristic_mini_parms(mol)
-                    
+                if not self.automini is None:
+                    print("\n\nGUESSING PARMS!!!!\n\n")
+                    self.heuristic_mini_parms(mol, self.automini)
+                else:
+                    print("MARAPETERS ARE",self.sdsteps, self.sdconv, self.cgsteps, self.cgconv )
                 args = (self._counter, self.current_mol_name)
                 self.dprint(msg % args)
                 # skip by SMARTS
