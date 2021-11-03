@@ -1,7 +1,7 @@
 from math import pi
 from string import ascii_letters, digits
 import sys
-import argparse 
+import argparse
 import os
 import itertools
 import psutil
@@ -13,16 +13,16 @@ from structure.scrub import Scrub
 from structure.chiralenumerator import ChiralEnumerator
 OPTIMALAMIDEDIHE = pi
 ZEROISH = 0.005
-# format used to generate string of molecule in the processing queue 
+# format used to generate string of molecule in the processing queue
 """
 ScrubMultiprocess and MolWriterMultiProcess work in separate threads:
- - ScrubMultiprocess receives data from queue_in, generates optimal coordinates and puts 
+ - ScrubMultiprocess receives data from queue_in, generates optimal coordinates and puts
     (molString, fname) in queue_out. Multiple instances of ScrubMultiprocess are created
-    in multiprocessing. Each time ScrubMultiprocess receives a poison pill, it will pass 
+    in multiprocessing. Each time ScrubMultiprocess receives a poison pill, it will pass
     it to the MolWriterMultiProcess, then will exit.
 
- - MolWriterMultiProcess reads 'molString' and writes it in fname; if MolWriterMultiProcess is initialized 
-    with a fname in the constructor, then fhane specified in the queue is ignored 
+ - MolWriterMultiProcess reads 'molString' and writes it in fname; if MolWriterMultiProcess is initialized
+    with a fname in the constructor, then fname specified in the queue is ignored
     and all outputs are written in the constructor single fname (self.fp).
     When initialized, the number of ScrubMultiprocess instances is defined, so that when
     the same number of poison pills is received, MolWriterMultiProcess will flush the data
@@ -76,18 +76,18 @@ class ScrubMultiprocess(mp.Process, Scrub):
 
 class MolWriterMultiProcess(mp.Process):
     def __init__(self, queue, threads, fname=None, ext=None):
-        """ molecular writer process, used to write 
+        """ molecular writer process, used to write
             molecules from the queue.
 
             by default, the queue provides tuples as
             (mol_string, fname), which will be written in
             the provided filename.
 
-            If fname is provided at the constructor, 
-            a file pointer is created when the class is 
+            If fname is provided at the constructor,
+            a file pointer is created when the class is
             instanciated (self.fp). The 'fname' from the queue will
             be ignored and all results will be appended in
-            self.fp. 
+            self.fp.
 
             if 'ext' is provided, it will be used as extension
             for the output files from the queue
@@ -104,7 +104,7 @@ class MolWriterMultiProcess(mp.Process):
     def run(self):
         """ """
         while True:
-            # TODO XXX handle error messages here 
+            # TODO XXX handle error messages here
             string, fname = self.queue.get()
             if string == None:
                 # poison pills are coming!
@@ -126,7 +126,7 @@ class MolWriterMultiProcess(mp.Process):
             self.fp.close()
         # DEBUG
         #print "Structures written [%d]" % self._c
-        return 
+        return
 
 class MolecularHound:
     """ a(n allegedly) efficient multi-SMARTS matcher"""
@@ -208,7 +208,7 @@ class MiniMee(object):
         self.default_cgsteps = 300
         self.default_forcefield = 'mmff94s'
         self.default_heuristics = 'quick'
-        self.default_heuristics_list = [ 'quick', 'accurate', 'long', 'extreme' ] 
+        self.default_heuristics_list = [ 'quick', 'accurate', 'long', 'extreme' ]
 
         # extra steps
         #self.default_sdconv = 1e-9
@@ -238,12 +238,12 @@ class MiniMee(object):
         self.default_multiproc_max = psutil.cpu_count()
         #self.default_multiproc_max = 1
         self.multiproc_max = self.default_multiproc_max
-        # NICE XXX TODO 
+        # NICE XXX TODO
         # psutil
         # source: https://stackoverflow.com/questions/1023038/change-process-priority-in-python-cross-platform
         #self.default_multiproc_nice = psutil.
 
-        self._allowedOutFormats = ['mol2', 'pdb', 'pdbqt', 'sdf', 'ent', 
+        self._allowedOutFormats = ['mol2', 'pdb', 'pdbqt', 'sdf', 'ent',
             'gpr', 'mdl', 'mol', 'mop', 'sd']
         self._validFnameChars = "-_.()%s%s" % (ascii_letters, digits)
 
@@ -256,7 +256,7 @@ class MiniMee(object):
             def _split_lines(self, text, width):
                 # this is the RawTextHelpFormatter._split_lines
                 if text.startswith('R|'):
-                    return text[2:].splitlines()  
+                    return text[2:].splitlines()
                 return argparse.HelpFormatter._split_lines(self, text, width)
         self.parser = argparse.ArgumentParser(description=self.desc,
             usage=self.usage, epilog=self.epilog,
@@ -284,10 +284,10 @@ class MiniMee(object):
         elif mtype == 'w':
             buff = '*** WARNING *** '
         qs = self._get_string(q)
-        print(buff + msg + qs) 
+        print(buff + msg + qs)
         if mtype == 'e':
             sys.exit(1)
-            
+
     def _get_string(self,q):
         """ Base/64"""
         return ""
@@ -304,7 +304,7 @@ class MiniMee(object):
         self._parse_opt_mol_processing()
         self._parse_opt_exclude()
         self._parse_opt_multiproc()
-        
+
     def _parse_opt_logging(self):
         """ set verbose mode and logging"""
         #self.verbose = self.args.verbose
@@ -328,8 +328,8 @@ class MiniMee(object):
 
     def _parse_opt_mol_names(self):
         """ check what's the policy for molecule names
-        
-            if using molecule names is requested, split is 
+
+            if using molecule names is requested, split is
             switched on, and the dictionary to keep track
             of molecules is created
         """
@@ -363,7 +363,7 @@ class MiniMee(object):
             msg = ('The input file has no extension and no input '
                    'format has been specified.\nUse \'--informat\' to '
                    'specify a supported format type\.\n'
-                   '"One goes to the right, the other to the left; ' 
+                   '"One goes to the right, the other to the left; '
                    'both are wrong, but in different directions." '
                    '-- Quintus Horatius Flaccus, Satires (II,3,5)'
                    )
@@ -375,13 +375,13 @@ class MiniMee(object):
             self.dprint("[_parse_opt_input] input file type defined as: %s" % self.informat)
         else:
             self.intype = self.inext
-            msg = ("[_parse_opt_input] input file name \"%s\" (guessed type: %s)") 
+            msg = ("[_parse_opt_input] input file name \"%s\" (guessed type: %s)")
             self.dprint( msg %  (self.infile, self.inext))
             self.informat = self.intype
 
     def _parse_opt_multi(self):
         """ perform the multi-structure check"""
-        # check for multi-structure 
+        # check for multi-structure
         try:
             self.multi = self.is_multi(self.infile)
             if self.multi == True:
@@ -394,12 +394,12 @@ class MiniMee(object):
                 self.dprint(msg)
             elif self.multi == None:
                 print("*** WARNING ***\nand now?")
-                    
+
         except IOError as e:
             msg =  'An error occurred while reading file [%s]:' % self.infile
             msg += 'I/O error (%d) : %s' % (e.errno, e.strerror)
             self.print_msg(msg)
-    
+
     def _parse_opt_output(self):
         """ parse output information to determine output filename
             and format.
@@ -409,7 +409,7 @@ class MiniMee(object):
         Filename:
             outname and usemolname specified ->  %outname_%usemolname
             outname only specified           -> %outname_(auto_progressive naming)
-            no outname specified             -> %inname 
+            no outname specified             -> %inname
 
         File type:
             outformat specified -> %outformat
@@ -435,7 +435,7 @@ class MiniMee(object):
         #### file name
         if not len(self.outname) and not self.usemolname:
                 # "%inname_processed"
-                self.outname = '%s_processed' % self.inname 
+                self.outname = '%s_processed' % self.inname
         ### file type
         if self.outformat:
             # requested format
@@ -497,14 +497,14 @@ class MiniMee(object):
                 self.print_msg(msg, q=2)
             self.dprint("[_parse_opt_slicing] processing molecule range:(%s,%s)" % (begin,end))
 
-    
+
     def _opt_update_output_fname(self):
         """ check various option combinations to provide
             the appropriate file name
         """
         self.outfile = self.outname
         # updating naming scheme (redundant 'usemolname', but good reminder)
-        if self.split or self.single or self.usemolname: 
+        if self.split or self.single or self.usemolname:
             if len(self.outfile):
                 self.outfile += "_%s"
             else:
@@ -519,7 +519,7 @@ class MiniMee(object):
 
     def _parse_opt_minimizer(self):
         """ minimizer parameters (forcefield, charges, minimizer steps)"""
-        # get options 
+        # get options
         self.automini = self.args.automini
         self.nomini = self.args.nomini
         self.noextra = self.args.noextra
@@ -546,7 +546,7 @@ class MiniMee(object):
                 self.print_msg(msg)
                 print(ff, self.ff_list)
                 sys.exit(1)
-        # charges model 
+        # charges model
         self.chargemodel = self.args.chargemodel.lower()
         # charges (check them here, they're going to be used always)
         if not self.chargemodel in self.charge_models_list:
@@ -604,7 +604,7 @@ class MiniMee(object):
             if self.cgsteps == None:
                 self.cgsteps = self.default_cgsteps
             if self.cgconv == None:
-                self.cgconv = self.default_cgconv           
+                self.cgconv = self.default_cgconv
         # steepest descent
         if self.sdsteps == 0:
             self.dprint("[_parse_opt_minimizer] SD disabled")
@@ -679,15 +679,16 @@ class MiniMee(object):
                    'Supported forcefields are: %s.') % (self.forcefield_extra,
                    self.ff_list_str)
             self.print_msg(msg)
-    
+
     def _parse_opt_mol_processing(self):
         """ parse molecule processing options"""
-        # mol processing 
+        # mol processing
         self.pH = self.args.pH
         self.nopH = self.args.nopH
         self.flipamide = not self.args.noflipamide
         self.stripsalts = not self.args.nostripsalts
         self.checkhydro = not self.args.nocheckhydro
+        self.strict = self.args.strict
         # self.fix_non_std_autodock = self.args.fix_non_std_autodock
         if self.args.noprocess:
             self.nopH = self.noflipamide = True
@@ -782,14 +783,14 @@ class MiniMee(object):
 
     def is_multi(self, fname, firstonly=True):
         """ check if there is more than one structure
-            NOTE (2014.9.15): this function is never used 
+            NOTE (2014.9.15): this function is never used
             for actual counting, that could turn out to be
             very expensing when processing large data files
 
-            The function should be re-written to check 
+            The function should be re-written to check
             that empty files are recognized!
         """
-        string_patterns = { 'smi': '\n', 'can': '\n', 
+        string_patterns = { 'smi': '\n', 'can': '\n',
                 'sdf' : '$$$$',
               'mol2': '@<TRIPOS>MOLECULE',
               'pdb': 'MODEL',
@@ -825,7 +826,7 @@ class MiniMee(object):
             # by definition, a CDX is considered a
             # multi-structure file
             return True
-            
+
         return False
 
     def get_name_ext(self, fname):
@@ -857,7 +858,7 @@ class MiniMee(object):
             validator.Init(p)
             if not validator.IsValid():
                 self.dprint('[validate_smarts]: invalid pattern found')
-                
+
                 return i,p
         self.dprint('[validate_smarts]: all patterns are valid')
         return True
@@ -909,26 +910,26 @@ class MiniMee(object):
             ff += '        {0:9s} : {1:30s}\n'.format(k,v)
         self.parser.print_help()
         self._advanced_help_text = """
-    
-An example usage is the generation of ligand structures to be used for docking, 
+
+An example usage is the generation of ligand structures to be used for docking,
 with AutoDock, starting from SMILES files or ChemDraw schemes:
 
   %(progname)s --infile ligand_library.smi --outfile ligand_library.mol2
-   
+
 This will generate automatically 3D coordinates and save them in a multi-structure
 Mol2 file.
 
-Another usage could be to split a Mol2 file that already has 3D coordinates and 
-generate single ligands suitable for docking with AutoDock (i.e., minimized 
+Another usage could be to split a Mol2 file that already has 3D coordinates and
+generate single ligands suitable for docking with AutoDock (i.e., minimized
 conformation, protonation state, etc...):
 
   %(progname)s --infile nci_p0.0.mol2 --outfile dockings.pdbqt \
        --usemolname --end 10
-   
-This will convert the first 10 molecules found in the file Mol2, 
+
+This will convert the first 10 molecules found in the file Mol2,
 saving ZINC79106062.pdbqt, ZINC33512584.pdbqt, etc...
 
-   
+
 
    %(progname)s is a general tool...
    PROTOCOL   When a molecule is read from a file, the following protocol is
@@ -975,7 +976,7 @@ saving ZINC79106062.pdbqt, ZINC33512584.pdbqt, etc...
                           Conjugate gradient minimization
                           (default forcefield: %(forcefield)s)
                                         |
-                       Quick weighted conformational search 
+                       Quick weighted conformational search
                                         |
                           Post-optimization using UFF ???
                                         |
@@ -984,7 +985,7 @@ saving ZINC79106062.pdbqt, ZINC33512584.pdbqt, etc...
                               (default format: %(outformat)s)
                                         |
                                         |
-                                     [ END ]            
+                                     [ END ]
 
 
    In the default non-verbose mode, processing output is shown is presented as following:
@@ -1000,11 +1001,11 @@ saving ZINC79106062.pdbqt, ZINC33512584.pdbqt, etc...
    conformation is reached. This is particularly important for docking.
 
    3D coordinates are generated automatically when 1D or 2D structures are found, then
-   a series of structural clean-ups are performed.   
+   a series of structural clean-ups are performed.
 
    SUPPORTED FORCEFIELDS
    The following forcefields are supported:
-%(ff)s   
+%(ff)s
     SUPPORTED PARTIAL CHARGE MODELS
     The following partial charge models are available:
 %(cc)s
@@ -1013,25 +1014,25 @@ EXAMPLES
 
    %(scriptname)s --infile ligand_library.smi --outfile ligand_library.mol2
        #  Generate 3D structures for all molecules found in the input file, adding hydrogens
-       #  protonating groups at pH 7.4, minimizing coordinates and performing all default 
+       #  protonating groups at pH 7.4, minimizing coordinates and performing all default
        #  structural cleanups, and saving the result in a single multi-structure file
-        
+
    %(scriptname)s --infile nci_p0.0.mol2 --outfile docking.pdbqt --noprocess --nomini --end 100 --usemolname
-       #  Convert first 100 molecules in the input file to separate PDBQT files ready 
+       #  Convert first 100 molecules in the input file to separate PDBQT files ready
        #  to be docked and using molecule names contained in the input file; no minimization is
        #  performed; all processing steps (salt stripping, hydrogens/protonation, trans-amide check)
-       #  are disabled; ligands will be saved as: 
+       #  are disabled; ligands will be saved as:
        #       docking_ZINC04783481.pdbqt
        #       docking_ZINC04786808.pdbqt
        #       docking_ZINC04786811.pdbqt
        #       ...
-              
-====================================================	 
-%(progname)s (C)2021 ForliLab, Scripps Research 
+
+====================================================
+%(progname)s (C)2021 ForliLab, Scripps Research
         """ % { 'progname' :self.progname,
         'pH': self.default_pH, 'charge':self.default_charges, 'forcefield':self.default_forcefield,
         'outformat': self.default_out, 'cc': cc, 'ff':ff, 'scriptname': os.path.basename(sys.argv[0]),
-        }  
+        }
         print(self._advanced_help_text)
 
 
@@ -1043,19 +1044,19 @@ EXAMPLES
 
         self._args_dict = { '--infile' : { 'help':'input file; '
                                   'format is guessed from file extension; ',
-                                 #'this is the only required argument', 
+                                 #'this is the only required argument',
                                  'action': 'store',
                                  'metavar' : 'INPUT_FILE[.EXT]', 'required' : True, 'type': str},
 
         '--single': {  'help':'process only Nth structure in the file' ,
                         'action' :  'store', 'metavar': 'STRUCTURE_NUMBER', 'type' : int},
 
-        '--begin' : { 'help':'start processing from Nth molecule', # (default: first molecule)', 
-                       'metavar' : 'FIRST_STRUCTURE_NUMBER', 'type': int, 'action':'store', 
+        '--begin' : { 'help':'start processing from Nth molecule', # (default: first molecule)',
+                       'metavar' : 'FIRST_STRUCTURE_NUMBER', 'type': int, 'action':'store',
                        'default': None},
 
-        '--end' : { 'help': 'stop processing at Nth molecule ', # (default: last molecule)', 
-                    'action' : 'store', 'metavar' : 'LAST_STRUCTURE_NUMBER', 'type': int, 
+        '--end' : { 'help': 'stop processing at Nth molecule ', # (default: last molecule)',
+                    'action' : 'store', 'metavar' : 'LAST_STRUCTURE_NUMBER', 'type': int,
                     'default': None},
 
         '--byname' : { 'help' : 'process only molecules with specified name (note: cAse sEnSiTivE,'
@@ -1095,7 +1096,7 @@ EXAMPLES
                              'and PDB input files)')
                              #; NOTE: spaces must specified with HTML notation, '
                              #'i.e. \'Cpd ID\' -> \'Cpd%%20ID\' (thank you sys.argv!)')
-                             , 'metavar': 'FIELD', 'action':'store', 
+                             , 'metavar': 'FIELD', 'action':'store',
                              'default' : None},
 
         # Splitting
@@ -1103,8 +1104,8 @@ EXAMPLES
                                 '(see \'--usemolname\' for using molecule names); '
                                 'disabled by default if output format supports multi-structure'),
                                 'default': self.default_split, 'action': 'store_true'},
-        
-        # minimizing 
+
+        # minimizing
         # XXX TODO XXX TODO XXX TODO
         # provide a minimum set of values good for everything
         # '--mini_quick' : { 'help':('steepest descent max. iterations; set to 0 to disable '
@@ -1119,8 +1120,8 @@ EXAMPLES
                             'settings are used; each level has 10x more energy evaluations than the previous; '
                             'the formula used to calculate evaluations is : '
                             '(bonds/10) * (atoms/10) * rotatable_bonds * LEVEL') % self.default_heuristics,
-                         'nargs':'?',  
-                         'action': 'store', 
+                         'nargs':'?',
+                         'action': 'store',
                          'const': "quick",
                          'metavar':'%s]' % "|".join(self.default_heuristics_list),
                         'type' : str, 'default' : None},
@@ -1129,7 +1130,7 @@ EXAMPLES
                         '(default %d).') % self.default_sdsteps, 'action': 'store', 'metavar':'[ %4g ]' % self.default_sdsteps,
                         'type' : int, 'default' : None},
 
-        '--sdconv' : {  'help':('set steepest descent convergence criterion. (default: %s)') % self.default_sdconv, 
+        '--sdconv' : {  'help':('set steepest descent convergence criterion. (default: %s)') % self.default_sdconv,
                         'action': 'store', 'metavar':  '[ %4g ]' % self.default_sdconv, 'type': float,
                         'default': self.default_sdconv},
 
@@ -1145,7 +1146,7 @@ EXAMPLES
                         '(default %d).') % self.default_sdsteps_extra, 'action': 'store', 'metavar':'[ %4g ]' % self.default_sdsteps_extra,
                         'type' : int, 'default' : None},
 
-        '--sdconv_extra' : {  'help':('set steepest descent convergence criterion (post-processing minimization with UFF?). (default: %s)') % self.default_sdconv_extra, 
+        '--sdconv_extra' : {  'help':('set steepest descent convergence criterion (post-processing minimization with UFF?). (default: %s)') % self.default_sdconv_extra,
                         'action': 'store', 'metavar':  '[ %4g ]' % self.default_sdconv_extra, 'type': float,
                         'default': self.default_sdconv_extra},
 
@@ -1160,21 +1161,21 @@ EXAMPLES
         '--rotamer_conf' : { 'help':('number of random conformers to use in weighted conformational search '
                              '(default: %s)' % self.default_rotamer_conf), 'action': 'store',
                              'metavar': '[ %d ]' % self.default_rotamer_conf, 'type':int, 'default': None},
-        
+
         '--rotamer_steps' : { 'help':('number of geometry minimization steps to per form during weighted '
                               'conformational search; this value should be small, otherwise calculation times '
                               'will increase considerably) (default: %s)' % self.default_rotamer_steps), 'action': 'store',
                              'metavar': '[ %s ]' % self.default_rotamer_steps, 'type':int, 'default': None},
 
         '--forcefield' : {'help': ('set forcefield for minimization (default: \'%s\'; see --help_advanced for '
-                            'choices)') % (self.default_forcefield) , 
+                            'choices)') % (self.default_forcefield) ,
                          'default': self.default_forcefield, 'metavar':'[ %s ]' % self.default_forcefield,
-                         'type': str}, 
+                         'type': str},
 
         '--forcefield_extra' : {'help': ('set forcefield for post-minimization (default: \'%s\'; see --help_advanced for '
-                            'choices)') % (self.default_forcefield_extra) , 
+                            'choices)') % (self.default_forcefield_extra) ,
                          'default': self.default_forcefield_extra, 'metavar':'[ %s ]' % self.default_forcefield_extra,
-                         'type': str}, 
+                         'type': str},
 
         '--strict'     : {'help':'do not process molecules with atoms missing forcefield/charges '
                           'parameters (default: %s)' % self.default_strict, 'action':'store_true' },
@@ -1194,30 +1195,30 @@ EXAMPLES
         '--verbose' : {'help': ('enable verbose mode'),
                                 'default' : self.default_verbose, 'action': 'store_true'},
 
-        '--noflipamide' :  { 'help': 'disable forcing cis conformation for non-cyclic primary/secondary amides', 
+        '--noflipamide' :  { 'help': 'disable forcing cis conformation for non-cyclic primary/secondary amides',
                              'action': 'store_true', 'default': self.default_noflipamide},
 
         '--nostripsalts' :  { 'help': 'disable removing salts/ions and small fragments (i.e. '
-                            'keep largest fragment only)', 'action': 'store_true', 
+                            'keep largest fragment only)', 'action': 'store_true',
                              'default': self.default_nostripsalts},
 
-        '--nocheckhydro' :  { 'help': 'disable check for missing hydrogens', 'action': 'store_true', 
+        '--nocheckhydro' :  { 'help': 'disable check for missing hydrogens', 'action': 'store_true',
                             'default': self.default_nocheckhydro },
 
         '--noprocess' :  { 'help': 'disable all structure processing (equivalent to (--noflipamide) + '
-                            '(--nocheckhydro) + (--nostripsalt) + (--nopH)', 'action': 'store_true', 
+                            '(--nocheckhydro) + (--nostripsalt) + (--nopH)', 'action': 'store_true',
                             'default': self.default_noprocess },
 
-        '--pH' :  { 'help': 'generate protonation state for requested pH (default: %1.1f)' % self.default_pH, 
+        '--pH' :  { 'help': 'generate protonation state for requested pH (default: %1.1f)' % self.default_pH,
                     'action': 'store', 'type': float, 'default': None, 'metavar':'[ 7.4 ]'}, # default set to None to perform check later
 
-        '--nopH' :  { 'help': 'disable protonation state modifications', 
+        '--nopH' :  { 'help': 'disable protonation state modifications',
                     'action': 'store_true', 'default': None}, # default set to None to perform check later
 
         '--chargemodel' : { 'help': ('set charge model to compute atom partial '
                             'charges (default \'%s\'; see --help_advanced for options)')
                             % (self.default_charges), 'metavar': '[ %s ]' % self.default_charges,
-                            'action': 'store', 'type': str, 'default': self.default_charges}, 
+                            'action': 'store', 'type': str, 'default': self.default_charges},
         '--enumchiral' : { 'help' : ('generate multiple stereoisomers for tetrahedral chiral'
                                 'centers (note: input geometry will be ignored); \'undefined\': '
                                 'enumerate only undefined chiral centers; '
@@ -1227,21 +1228,21 @@ EXAMPLES
 
         '--maxenumchiral' : { 'help': ('maximum number of enantiomers to generate if --enumchiral'
                         ' is active; default: %d' % self.default_maxenumchiral),
-                'default': self.default_maxenumchiral, 'action' : 'store', 
+                'default': self.default_maxenumchiral, 'action' : 'store',
                 'metavar': 'MAX_ENANTIOMERS', 'type':int},
 
         '--exclude' :  { 'help': ('skip molecules matching specified SMARTS pattern; '
                                  'multiple patterns can be repeated by using multiple \'--exclude\' '
-                                'or using \'--excludefromfile\''), 
+                                'or using \'--excludefromfile\''),
                     'action': 'append', 'metavar': 'SMARTS', 'type': str, 'default': []},
 
         '--excludefromfile' :  { 'help': ('skip molecules matching any of the SMARTS patterns'
-                                        ' in each line of FILENAME'), 
+                                        ' in each line of FILENAME'),
                     'action': 'store', 'metavar': 'FILENAME', 'type': str, 'default': None},
 
         '--multicore' :  { 'help':('specify how many cores/cpu to use '
                              '(default: %d)' % self.default_multiproc_max), 'action': 'store',
-                             'metavar': '[ %d ]' % self.default_multiproc_max, 'type':int, 
+                             'metavar': '[ %d ]' % self.default_multiproc_max, 'type':int,
                             'default': self.default_multiproc_max},
 
 
@@ -1254,18 +1255,18 @@ EXAMPLES
 
         # enforce the proper arguments order for the help message
         self._optparser_args_order = {  # in/out
-                'INPUT/OUTPUT' : [ '--infile', '--outfile',  '--informat', 
+                'INPUT/OUTPUT' : [ '--infile', '--outfile',  '--informat',
                         '--outformat', '--usemolname', '--usemolnamesafe', '--usefieldname' ],
                 # slicing
                 'SLICING' : ['--single', '--begin', '--end', '--split', '--byname'],
-                # mol processing 
-                'CLEANUP': [ '--pH', '--nopH', '--noflipamide', '--nostripsalts', '--nocheckhydro', 
+                # mol processing
+                'CLEANUP': [ '--pH', '--nopH', '--noflipamide', '--nostripsalts', '--nocheckhydro',
                             '--noprocess', '--enumchiral', '--maxenumchiral', '--exclude', '--excludefromfile',
                             # '--fix_non_std_autodock',
                             ],
-                # minimizer 
-                'ENERGY MINIMIZATION AND FORCEFIELD PARAMETERS' : [ '--automini', '--sdsteps', '--sdconv', '--cgsteps', '--cgconv', '--forcefield', 
-                             '--sdsteps_extra', '--sdconv_extra', '--cgsteps_extra', '--cgconv_extra', '--forcefield_extra', 
+                # minimizer
+                'ENERGY MINIMIZATION AND FORCEFIELD PARAMETERS' : [ '--automini', '--sdsteps', '--sdconv', '--cgsteps', '--cgconv', '--forcefield',
+                             '--sdsteps_extra', '--sdconv_extra', '--cgsteps_extra', '--cgconv_extra', '--forcefield_extra',
                              '--rotamer_conf', '--rotamer_steps',
 
                 '--nomini', '--noextra', '--norotamer', '--chargemodel', '--strict'],
@@ -1344,7 +1345,7 @@ EXAMPLES
     def get_mol_string(self, mol):
         """ generate string to submit to the queue"""
         return self.ob_mol_parser.WriteString(mol) #, self.intype)
-    
+
     def get_mol_title(self, mol):
         """ get the molecule name stored in the OBMol obj
             and sanitize it if required: spaces will be converted to
@@ -1374,7 +1375,7 @@ EXAMPLES
         if not self.args.usefieldname == None:
             self.args.usefieldname = self.args.usefieldname.replace('%20', ' ')
             self.dprint('[get_mol_name] Search field name :"%s"' % self.args.usefieldname)
-            # by field 
+            # by field
             try:
                 mname = data[self.args.usefieldname].strip()
                 self.dprint('[get_mol_name] Found name :"%s"' % mname)
@@ -1415,14 +1416,14 @@ EXAMPLES
         data = mol.GetData()
         answer = [ x for x in data if
             x.GetDataType() == ob.PairData or
-            x.GetDataType() == ob.CommentData]    
+            x.GetDataType() == ob.CommentData]
         raw = [ ( x.GetAttribute(), x.GetValue() ) for x in answer ]
-        return dict(raw)        
-        
+        return dict(raw)
+
     def write_output(self, mol):
         """ write processed molecule accordingly to the file
             output policy: update the multi-structure file
-            or create a new file 
+            or create a new file
         """
         if self.split or self.single:
             fname = self.outfile % (self.current_mol_name)
@@ -1439,7 +1440,7 @@ EXAMPLES
 
     def heuristic_mini_parms(self, mol, level='quick'):
         """ try to guess """
-        level_settings = {'quick':1, 'accurate':10, 'long':100, 'extreme':1000} 
+        level_settings = {'quick':1, 'accurate':10, 'long':100, 'extreme':1000}
         rot = mol.NumRotors()
         atoms = mol.NumHvyAtoms()
         bonds = mol.NumBonds()
@@ -1462,18 +1463,19 @@ EXAMPLES
         """ """
         # print("CALLED", self.forcefield)
         self.scrub_options = { 'ff':self.forcefield, 'sdsteps':self.sdsteps,
-            'sdconv':self.sdconv, 'cgsteps':self.cgsteps, 
-            'cgconv':self.cgconv, 'ff_extra':self.forcefield_extra, 
-                'sdsteps_extra':self.sdsteps_extra, 
-                'sdconv_extra':self.sdconv_extra, 
+            'sdconv':self.sdconv, 'cgsteps':self.cgsteps,
+            'cgconv':self.cgconv, 'ff_extra':self.forcefield_extra,
+                'sdsteps_extra':self.sdsteps_extra,
+                'sdconv_extra':self.sdconv_extra,
                 'cgsteps_extra':self.cgsteps_extra,
-                'cgconv_extra':self.cgconv_extra, 
+                'cgconv_extra':self.cgconv_extra,
                 'rotamer_conf' : self.rotamer_conf,
                 'rotamer_geom_steps' : self.rotamer_steps,
                 'pH':self.pH, 'chargemodel':self.chargemodel,
                 'flip_cis_amide': self.flipamide,
-                'stripsalts':self.stripsalts, 
-                'checkhydro':self.checkhydro,   'name': None, #self.current_mol_name, 
+                'stripsalts':self.stripsalts,
+                'strict':self.strict,
+                'checkhydro':self.checkhydro,   'name': None, #self.current_mol_name,
                 'verbose':self.verbose, 'auto':True
             }
         # feeding queue
@@ -1482,7 +1484,7 @@ EXAMPLES
         self.queue_out = mp.Queue(maxsize=-1)
         # create processes and start them
         for i in range(self.multiproc_max):
-           s = ScrubMultiprocess(self.queue_in, self.queue_out, nice=None, 
+           s = ScrubMultiprocess(self.queue_in, self.queue_out, nice=None,
                 in_type=self.intype, out_type=self.outtype,  scrub_opts = self.scrub_options)
            s.start()
         # XXX this has to be fixed for split, etc...
@@ -1501,7 +1503,7 @@ EXAMPLES
         for i in range(self.multiproc_max):
             self.queue_in.put((None,None))
         #self.queue_out.put((None, None))
-        
+
     def _init_loop(self):
         """ initialize variables, molecule input file parser and threads"""
         self._counter = 1 # general counter
@@ -1509,8 +1511,8 @@ EXAMPLES
         self._processed = 0
         self._init_mol_parser()
         self._init_threads()
-        
-    
+
+
     def start(self):
         """ main loop does the actual job"""
         self.dprint('====================[ START ]====================')
@@ -1531,7 +1533,7 @@ EXAMPLES
                 raw_mol = self.read_mol()
                 self.dprint("[start] molecule[%s] skipped by counting" % self._counter)
                 continue
-            molData = self.get_mol_data(raw_mol) 
+            molData = self.get_mol_data(raw_mol)
             # enumerate chiral structures
             for mol in ChiralEnumerator(raw_mol, self.args.enumchiral,
                                 self.args.maxenumchiral, debug=self.verbose):
@@ -1541,7 +1543,7 @@ EXAMPLES
                 if self.current_mol_name == None:
                     # skip by name
                     continue
-                msg = "-------------[processing mol.%d: %s]---------" 
+                msg = "-------------[processing mol.%d: %s]---------"
                 if not self.automini is None:
                     print("\n\nGUESSING PARMS!!!!\n\n")
                     self.heuristic_mini_parms(mol, self.automini)
@@ -1571,12 +1573,12 @@ EXAMPLES
 
     # TODO not used?
     #def setStopCriterion(self):
-    #    for i in range(self.multiproc_max): 
+    #    for i in range(self.multiproc_max):
     #        self.queue_in.put((None,None))
     #    self.queue_out.put(None)
     #    #self.queue_in.close()
     #    #self.queue_in.join_thread()
-         
+
 ###### XXX XXX HIC SUNT LEONES
 if __name__ == '__main__':
     MiniMee()
@@ -1594,7 +1596,7 @@ if __name__ == '__main__':
     print "\n\n\n"
 
 
-    print "GET IDEAS:http://openbabel.org/docs/dev/Command-line_tools/babel.html#append-option " 
+    print "GET IDEAS:http://openbabel.org/docs/dev/Command-line_tools/babel.html#append-option "
     print "\n Implement UNIQUE ATOM NAMES"
     #print "-- enumerate chirality"
     """

@@ -29,7 +29,7 @@ class Scrub(object):
 
         [ http://www.merriam-webster.com/dictionary/scrub ]
         2scrub verb
-                : to rub (something) hard with a rough object or 
+                : to rub (something) hard with a rough object or
                   substance and often with soap in order to clean it
     """
     # TODO
@@ -39,10 +39,10 @@ class Scrub(object):
     #   - add PAINS support
     #   - read from compressed formats
     def __init__(self, ff='MMFF94s', ff_extra='UFF',
-        sdsteps=250, sdconv= '1e-6', 
-                cgsteps=100, cgconv='1e-8', 
-                sdsteps_extra=100, sdconv_extra= '1e-6', 
-                cgsteps_extra=100, cgconv_extra='1e-8', 
+        sdsteps=250, sdconv= '1e-6',
+                cgsteps=100, cgconv='1e-8',
+                sdsteps_extra=100, sdconv_extra= '1e-6',
+                cgsteps_extra=100, cgconv_extra='1e-8',
                 rotamer_conf = 10, rotamer_geom_steps=5,
                 extra_3d_mini = False,
                 flip_cis_amide = True,
@@ -108,7 +108,7 @@ class Scrub(object):
         msg += "VERBOSE: [SCRUB] %s" % string
         if not addnewline:
             print(msg, end=' ')
-        else:    
+        else:
             print(msg)
         if flush:
             sys.stdout.flush()
@@ -142,7 +142,7 @@ class Scrub(object):
             # problem somewhere!
             print("Error on mol: %s" % self.mol_name)
             return None
-        
+
 
     def _preprocess_mol(self):
         """ initialize presettings"""
@@ -157,12 +157,12 @@ class Scrub(object):
         self.fix_ph()
         # calculate charges
         self.calc_charges()
-        
+
 
     def checkStructure(self):
         """ check if the molecule has a 3D structure
             otherwise generate it
-            if the structure is already 3D, 
+            if the structure is already 3D,
             check that hydrogens are properly added
         """
         # 3D + hydrogens
@@ -185,7 +185,7 @@ class Scrub(object):
         """
         #self.mol.PerceiveBondOrders()
         #print "SKIPP CHECKISS"
-        return 
+        return
         for a in ob.OBMolAtomIter(self.mol):
             valence = a.GetValence()
             implicit = a.GetImplicitValence()
@@ -221,8 +221,8 @@ class Scrub(object):
 
     def calc_charges(self):
         """ calculate partial charges using selected charge model"""
-        # XXX partial charges are queried to trigger something in the 
-        #     openbabel lib that fixes charge bug 
+        # XXX partial charges are queried to trigger something in the
+        #     openbabel lib that fixes charge bug
         # TODO this function should be disabled if an option to use original
         #      charges is used
         #print "WARNING: destroying any input charges!"
@@ -299,15 +299,15 @@ class Scrub(object):
             return
         dihe = self.calc_dihedral(oxy, carbon, nitro, hydro)
         if abs(dihe) <= r180:
-            deviation = abs(dihe) 
+            deviation = abs(dihe)
         else:
             deviation = abs(dihe) - r180
         if deviation <= tol:
-            if self.verbose: 
+            if self.verbose:
                 print(('[VERBOSE] Amide TRANS conformation detected'
                         ' ( %3.2f deg, deviation: %3.3f): OK' % (dihe, deviation  )))
             return
-        if self.verbose: 
+        if self.verbose:
                 print(('[VERBOSE] Amide CIS conformation '
                        'detected ( %2.2f deg): FIXING!' % math.degrees(dihe) ))
         angleFix = ob.double_array([-dihe])[0]
@@ -322,10 +322,10 @@ class Scrub(object):
         rotor.SetBond(bond)
         rotor.SetDihedralAtoms(idx)
         return
-            
 
-    def calc_dihedral(self, a1, a2, a3, a4): 
-        """ given 4 OBAtom return the dihedral 
+
+    def calc_dihedral(self, a1, a2, a3, a4):
+        """ given 4 OBAtom return the dihedral
             angle between them
         """
         v1 = self._obatom_to_vec(a1, a2)
@@ -345,7 +345,7 @@ class Scrub(object):
         c1 = self._get_obatom_coord(a1)
         c2 = self._get_obatom_coord(a2)
         return c2-c1
-        
+
     def _get_obatom_coord(self, a):
         """ given an atom return its coords as float"""
         coord = [ a.GetX(), a.GetY(), a.GetZ() ]
@@ -376,7 +376,7 @@ class Scrub(object):
     #     self.forcefield = ob.OBForceField.FindType(self.ff)
     #     # setup the outlevel
     #     self.set_ff_outlev()
-        
+
     #     outlev = ob.OBFF_LOGLVL_NONE
     #     if self.verbose:
     #         outlev = ob.OBFF_LOGLVL_LOW
@@ -422,12 +422,12 @@ class Scrub(object):
         can = obc.WriteString(self.mol)
         self.vprint('[VPRINTCAN] Generated canonical form: %s' %can.strip())
         print('[%s] %s' % (msg, can.strip()))
-        
+
 
     def make_3d(self, canonicize=False, extra_3d_mini=False):
-        """ make 3D on request 
+        """ make 3D on request
             by default, a canonical SMILES form is generated
-            to avoid twisted/interconnected groups of 
+            to avoid twisted/interconnected groups of
             atoms ? USEFUL?
         """
         self.vprint('[make_3d] Generating 3D structure')
@@ -442,9 +442,16 @@ class Scrub(object):
         ff = self.set_force_field('mmff94s')
         setup_out = ff.Setup(self.mol)
         if not setup_out:
-            print("ERROR SETTING UP THE MOLECULE!")
-            self.ready=False
-            return
+            if self.strict:
+                print("ERROR SETTING UP THE MOLECULE! (strict, bailing out)")
+                self.ready=False
+                return
+            # try the alternative force field
+            ff = self.set_force_field('uff')
+            setup_out = ff.Setup(self.mol)
+            if not setup_out:
+                print("ERROR SETTING UP THE MOLECULE! (non-strict, bailing out after alt_FF attempt)")
+
         ff.EnableCutOff(True);
         ff.SetVDWCutOff(10.0);
         ff.SetElectrostaticCutOff(20.0);
@@ -469,9 +476,9 @@ class Scrub(object):
         #     return
         # run the standard basic minimization (with the first FF, usually MMFF94), which can includes rotameric search
         if not self.sdsteps == self.cgsteps == 0:
-            self._run_ff_optimization(self.ff, 
-                    self.sdsteps, self.sdconv, 
-                    self.cgsteps, self.cgconv, 
+            self._run_ff_optimization(self.ff,
+                    self.sdsteps, self.sdconv,
+                    self.cgsteps, self.cgconv,
                     (self.rotamer_conf>0))
 
         # check if amides are in cis-form
@@ -479,12 +486,12 @@ class Scrub(object):
             self._check_amide()
         # run the extra minimization (UFF)
         # ff = self.set_force_field(self.ff_extra)
-        # if not self.ready: 
+        # if not self.ready:
         #     return
         if not self.sdsteps_extra == self.cgsteps_extra == 0:
-            self._run_ff_optimization(self.ff_extra, 
-                    self.sdsteps_extra, self.sdconv_extra, 
-                    self.cgsteps_extra, self.cgconv_extra, 
+            self._run_ff_optimization(self.ff_extra,
+                    self.sdsteps_extra, self.sdconv_extra,
+                    self.cgsteps_extra, self.cgconv_extra,
                     False)
 
     def _run_ff_optimization(self, ff, sdsteps, sdconv, cgsteps, cgconv, rotamer_search=False):
@@ -493,7 +500,7 @@ class Scrub(object):
         if not self.ready:
             return
         # XXX Add logging here
-        #print "%s:" % self.name, 
+        #print "%s:" % self.name,
         # steepest descent
         if sdsteps:
             self.minimize(ff, 'sd', steps=sdsteps, convergence=self.sdconv)
