@@ -136,7 +136,7 @@ class Scrub(object):
             if unique_atom_names:
                 self._set_unique_atom_names()
             out = self.parser.WriteString(self.mol)
-            return ("%s\n" % out)
+            return ("%s" % out)
         else:
         # except:
             # problem somewhere!
@@ -154,7 +154,9 @@ class Scrub(object):
         if not self.ready:
             return
         # check hydrogens
-        self.fix_ph()
+        if self.pH is not None:
+            self.mol.CorrectForPH(self.pH)
+            self.mol.AddHydrogens() # CorrectForPH deletes hydrogens
         # calculate charges
         self.calc_charges()
         
@@ -191,33 +193,6 @@ class Scrub(object):
             implicit = a.GetImplicitValence()
             if not (valence == implicit):
                 self.mol.AddHydrogens(a)
-
-    def fix_ph(self, pH=None):
-        """ performs pH magics"""
-        if pH == None:
-            pH = self.pH
-        if self.pH == None:
-            return
-        self.verbose=True
-        # self.vprintCan('fix_ph: START')
-        self.mol.DeleteHydrogens()
-        # self.vprintCan('fix_ph: DEL_H   ')
-        self.mol.UnsetFlag(ob.OB_PH_CORRECTED_MOL)
-        # self.vprintCan('fix_ph: UNSETFLAG   ')
-        for a in ob.OBMolAtomIter(self.mol):
-            a.SetFormalCharge(0)
-        # self.vprintCan('fix_ph: FORMALCHARGE')
-        self.mol.SetAutomaticFormalCharge(True)
-        # insanity fix for nitrogen for OB total disregard of chemistry...
-        for a in ob.OBMolAtomIter(self.mol):
-            if not a.GetAtomicNum() == 7:
-                continue
-            if (a.GetTotalDegree()==4) and (a.GetFormalCharge()==0):
-                a.SetFormalCharge(1)
-        # self.vprintCan('fix_ph: AUTOFORMAL  ')
-        self.mol.AddHydrogens(False, True, pH)
-        # self.vprintCan('fix_ph: ADDYDRO  ')
-        self.verbose=False
 
     def calc_charges(self):
         """ calculate partial charges using selected charge model"""
