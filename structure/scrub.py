@@ -13,6 +13,7 @@ ZEROISH = 0.005
 # suppress warning messages
 ob.obErrorLog.SetOutputLevel(0)
 
+FALLBACK_FF='uff'
 
 ###
 ### IMPORTANT: get example to suppress log from Dalke
@@ -23,6 +24,9 @@ ob.obErrorLog.SetOutputLevel(0)
 
 # XXX refactor this class to have multiple set methods
 # XXX so objects are initialized once, performance will be better
+# TODO add support for strict so that the FALLBACK_FF is used
+
+
 class Scrub(object):
     """ This class is devoted to generate a minimum conformation
             for a ligand.
@@ -409,7 +413,14 @@ class Scrub(object):
                        'not available for molecule -> rejecting')
                 self.ready = False
                 return False
-            print("WARNING: [%s] Missing force field parameters for molecule [%s] !" % (ff_name, self.mol_name))
+            else:
+                print("WARNING: [%s] Missing force field parameters for molecule [%s], trying fallback FF (%s)" % (ff_name, self.mol_name, FALLBACK_FF))
+                ff = self.set_force_field('uff')
+                setup_out = ff.Setup(self.mol)
+                if not setup_out:
+                    print("ERROR SETTING UP THE MOLECULE! (non-strict, bailing out after alt_FF attempt)")
+                    self.ready = False
+                    return False
         return ff
 
     def vprintCan(self, msg='VPRINTCAN'):
