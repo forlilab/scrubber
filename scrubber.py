@@ -5,7 +5,7 @@ import argparse
 import os
 import itertools
 import psutil
-import multiprocessing as mp
+#import multiprocessing as mp
 
 from openbabel import openbabel as ob
 
@@ -29,104 +29,104 @@ ScrubMultiprocess and MolWriterMultiProcess work in separate threads:
     in the output file, then will exit.
 """
 
-class ScrubMultiprocess(mp.Process, Scrub):
-    def __init__(self, queue_in, queue_out, nice=None, in_type='sdf', out_type='sdf', scrub_opts={}):
-        mp.Process.__init__(self)
-        self.in_type = in_type
-        self.out_type = out_type
-        if 'auto' in scrub_opts:
-            scrub_opts['auto'] = True
-        Scrub.__init__(self, **scrub_opts)
-        self.queue_in = queue_in
-        self.queue_out = queue_out
-        self.nice = nice
-        # total processed
-        self._c = 0
-        # failed
-        self._f = 0
-
-    def run(self):
-        # nice from here: https://andrewbolster.info/2014/05/multiprocessing-niceness-in-python
-        # TODO add IOPRIO classes in both linux and windows
-        if not self.nice == None:
-            if not psutil.WINDOWS:
-                p = psutil.Process(os.getpid())
-                niceness = os.nice(0)
-                os.nice(self.nice - niceness)
-            else:
-                print("Warning: ignoring nice value on Windows")
-        while True:
-            # TODO
-            # this should become: name, string, fname
-            string, fname = self.queue_in.get()
-            if string == None:
-                # poison pill!
-                self.queue_in.task_done()
-                self.queue_out.put((None, None))
-                break
-            # this should become (name, string, self.in_type, self.out_type)
-            mol_string = self.process(string, self.in_type, self.out_type, unique_atom_names=True)
-            if not mol_string is None:
-                self.queue_out.put((mol_string, fname))
-            else:
-                self._f += 1
-            self.queue_in.task_done()
-            self._c +=1
-        return
-
-class MolWriterMultiProcess(mp.Process):
-    def __init__(self, queue, threads, fname=None, ext=None):
-        """ molecular writer process, used to write 
-            molecules from the queue.
-
-            by default, the queue provides tuples as
-            (mol_string, fname), which will be written in
-            the provided filename.
-
-            If fname is provided at the constructor, 
-            a file pointer is created when the class is 
-            instanciated (self.fp). The 'fname' from the queue will
-            be ignored and all results will be appended in
-            self.fp. 
-
-            if 'ext' is provided, it will be used as extension
-            for the output files from the queue
-        """
-        mp.Process.__init__(self)
-        self.queue = queue
-        self.threads = threads
-        self.fp = None
-        if not fname == None:
-            self.fp = open(fname, 'wb', 0)
-        self.ext = ext
-        self._c=0
-
-    def run(self):
-        """ """
-        while True:
-            # TODO XXX handle error messages here 
-            string, fname = self.queue.get()
-            if string == None:
-                # poison pills are coming!
-                self.threads -= 1
-                if self.threads == 0:
-                    break
-                else:
-                    #print "Pill received...", self.threads
-                    pass
-            else:
-                self._c+=1
-                if not (self.fp == None):
-                    self.fp.write(str.encode(string))
-                else:
-                    with open("%s.%s" % (fname, self.ext), 'wb', 0) as fp:
-                        fp.write(str.encode(string))
-                    #fp.close()
-        if not self.fp == None:
-            self.fp.close()
-        # DEBUG
-        #print "Structures written [%d]" % self._c
-        return 
+### class ScrubMultiprocess(mp.Process, Scrub):
+###     def __init__(self, queue_in, queue_out, nice=None, in_type='sdf', out_type='sdf', scrub_opts={}):
+###         mp.Process.__init__(self)
+###         self.in_type = in_type
+###         self.out_type = out_type
+###         if 'auto' in scrub_opts:
+###             scrub_opts['auto'] = True
+###         Scrub.__init__(self, **scrub_opts)
+###         self.queue_in = queue_in
+###         self.queue_out = queue_out
+###         self.nice = nice
+###         # total processed
+###         self._c = 0
+###         # failed
+###         self._f = 0
+### 
+###     def run(self):
+###         # nice from here: https://andrewbolster.info/2014/05/multiprocessing-niceness-in-python
+###         # TODO add IOPRIO classes in both linux and windows
+###         if not self.nice == None:
+###             if not psutil.WINDOWS:
+###                 p = psutil.Process(os.getpid())
+###                 niceness = os.nice(0)
+###                 os.nice(self.nice - niceness)
+###             else:
+###                 print("Warning: ignoring nice value on Windows")
+###         while True:
+###             # TODO
+###             # this should become: name, string, fname
+###             string, fname = self.queue_in.get()
+###             if string == None:
+###                 # poison pill!
+###                 self.queue_in.task_done()
+###                 self.queue_out.put((None, None))
+###                 break
+###             # this should become (name, string, self.in_type, self.out_type)
+###             mol_string = self.process(string, self.in_type, self.out_type, unique_atom_names=True)
+###             if not mol_string is None:
+###                 self.queue_out.put((mol_string, fname))
+###             else:
+###                 self._f += 1
+###             self.queue_in.task_done()
+###             self._c +=1
+###         return
+### 
+### class MolWriterMultiProcess(mp.Process):
+###     def __init__(self, queue, threads, fname=None, ext=None):
+###         """ molecular writer process, used to write 
+###             molecules from the queue.
+### 
+###             by default, the queue provides tuples as
+###             (mol_string, fname), which will be written in
+###             the provided filename.
+### 
+###             If fname is provided at the constructor, 
+###             a file pointer is created when the class is 
+###             instanciated (self.fp). The 'fname' from the queue will
+###             be ignored and all results will be appended in
+###             self.fp. 
+### 
+###             if 'ext' is provided, it will be used as extension
+###             for the output files from the queue
+###         """
+###         mp.Process.__init__(self)
+###         self.queue = queue
+###         self.threads = threads
+###         self.fp = None
+###         if not fname == None:
+###             self.fp = open(fname, 'wb', 0)
+###         self.ext = ext
+###         self._c=0
+### 
+###     def run(self):
+###         """ """
+###         while True:
+###             # TODO XXX handle error messages here 
+###             string, fname = self.queue.get()
+###             if string == None:
+###                 # poison pills are coming!
+###                 self.threads -= 1
+###                 if self.threads == 0:
+###                     break
+###                 else:
+###                     #print "Pill received...", self.threads
+###                     pass
+###             else:
+###                 self._c+=1
+###                 if not (self.fp == None):
+###                     self.fp.write(str.encode(string))
+###                 else:
+###                     with open("%s.%s" % (fname, self.ext), 'wb', 0) as fp:
+###                         fp.write(str.encode(string))
+###                     #fp.close()
+###         if not self.fp == None:
+###             self.fp.close()
+###         # DEBUG
+###         #print "Structures written [%d]" % self._c
+###         return 
 
 class MolecularHound:
     """ a(n allegedly) efficient multi-SMARTS matcher"""
@@ -1508,7 +1508,7 @@ EXAMPLES
         self._rejected = 0
         self._processed = 0
         self._init_mol_parser()
-        self._init_threads()
+        #self._init_threads()
         
     
     def start(self):
@@ -1516,6 +1516,26 @@ EXAMPLES
         self.dprint('====================[ START ]====================')
         # start!
         self._init_loop()
+
+        scrub_options = { 'ff':self.forcefield, 'sdsteps':self.sdsteps,
+            'sdconv':self.sdconv, 'cgsteps':self.cgsteps, 
+            'cgconv':self.cgconv, 'ff_extra':self.forcefield_extra, 
+                'sdsteps_extra':self.sdsteps_extra, 
+                'sdconv_extra':self.sdconv_extra, 
+                'cgsteps_extra':self.cgsteps_extra,
+                'cgconv_extra':self.cgconv_extra, 
+                'rotamer_conf' : self.rotamer_conf,
+                'rotamer_geom_steps' : self.rotamer_steps,
+                'pH':self.pH, 'chargemodel':self.chargemodel,
+                'flip_cis_amide': self.flipamide,
+                'stripsalts':self.stripsalts, 
+                'checkhydro':self.checkhydro,   'name': None, #self.current_mol_name, 
+                'verbose':self.verbose, 'auto':True
+            }
+
+        output_fp = open(self.outfile, "w")
+        scrub = Scrub(**scrub_options)
+
         raw_mol = self.read_mol(first=True)
         if not self.begin == 1:
             print("Seeking begin molecule %d... " % (self.begin))
@@ -1545,8 +1565,6 @@ EXAMPLES
                 if not self.automini is None:
                     print("\n\nGUESSING PARMS!!!!\n\n")
                     self.heuristic_mini_parms(mol, self.automini)
-                else:
-                    print("MARAPETERS ARE",self.sdsteps, self.sdconv, self.cgsteps, self.cgconv )
                 args = (self._counter, self.current_mol_name)
                 self.dprint(msg % args)
                 # skip by SMARTS
@@ -1554,15 +1572,21 @@ EXAMPLES
                     molRaw = self.read_mol()
                     self.dprint("[start] molecule[%s] skipped by SMARTS" % self.current_mol_name)
                     continue
-                self.add_mol_to_queue(mol, self.current_mol_name)
+                mol_string = self.get_mol_string(mol)
+                #print("start scrub: %s" % mol.GetTitle())
+                output_string = scrub.process(mol_string, self.intype, self.outtype)
+                output_fp.write(output_string)
                 self._processed += 1
+                #print("scrubbed successfully %d" % self._processed)
+                #self.add_mol_to_queue(mol, self.current_mol_name)
             # terminate by counter
             if self.end and (self._counter == self.end):
                 break
             raw_mol = self.read_mol()
+        output_fp.close()
         # poison pill
-        self._close_threads()
-        print("\n\n\n\n\n[ DONE ]Total structures processed: %d" % (self._processed))
+        # self._close_threads()
+        print("[ DONE ]Total structures processed: %d" % (self._processed))
 
     def add_mol_to_queue(self, mol, name):
         """ """

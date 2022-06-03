@@ -5,7 +5,7 @@ from openbabel import openbabel as ob
 import numpy as np
 import math, string
 import sys
-import multiprocessing as mp
+#import multiprocessing as mp
 
 OPTIMALAMIDEDIHE = math.pi
 ZEROISH = 0.005
