@@ -1,0 +1,117 @@
+##############################################################################
+#                                                                            #
+#                   Open Babel file: phmodel.txt                             #
+#                                                                            #
+#  Copyright (c) 1998-2001 by OpenEye Scientific Software, Inc.              #
+#  Some portions Copyright (c) 2001-2003 by Geoffrey R. Hutchison            #
+#  Part of the Open Babel package, under the GNU General Public License (GPL)#
+#                                                                            #
+#  pH model data (used by phmodel.cpp:OBPhModel)                             #
+#                                                                            #
+# TRANSFORM: chemical transforms can be used to modify formal charges, bond  #
+#            orders, and to delete atoms (i.e hydrogens). Changes are applied#
+#        to vector bound atoms (use the [:#] SMARTS notation) and bonds      #
+#            between vector bound atoms.                                     #
+# SEEDCHARGE: used to seed partial charges.  Seed partial charges            #
+#             are used as initial values in Gasteiger charge calculation     #
+#                                                                            #
+##############################################################################
+
+######### # FORMAT # SMARTS_IN >> SMARTS_OUT    pKa, pKb
+
+#carboxylic acid
+[O:1]=[C:2][$([OH1,Oh1]):3]>> [O:1]=[C:2]-[OX1-1:3] 4.0
+# TODO aromatic vs alyphatic?
+
+
+#uncomment for vinylogous carboxylic acids (e.g. ascorbic acid)
+[O:1]=[C:2][C:3]=[C:4][O:5] >> [O:1]=[C:2][C:3]=[C:4][O-:5]   4.0 
+
+#charged amine (pKa 10.0)
+[N^3-0;!$(N~[!#6;!#1]):1] >> [N+1:1]				4.0
+
+#imidazole: note pKa=7.0
+[nD2:1]1c[nH]cc1 >> [n+:1]1c[nH]cc1				7.0
+
+#imine
+[ND3+0:1]=[#6] >> [ND3+:1]=[#6]				4.0
+
+#tetrazole
+[nD2:1]([#1:2])1[nD2-0][nD2-0][nD2-0]c1 >> [n-:1]1nnnc1	4.89 
+[nD2-0]1[nD2:1]([#1:2])[nD2-0][nD2-0]c1 >> n1[n-:1]nnc1	4.89 
+[nD2-0:1]1[nD2-0][nD2-0][nD2-0]c1 >> [n-:1]1nnnc1		4.89 
+
+#azide (always apply these transformations)
+[ND1:1]~[ND2:2]~[ND1:3] >> [N-:1]=[N+:2]=[N-:3] 1E+10	    
+[ND1:1]~[ND2:2]~[ND1:3]~* >> [N-:1]=[N+:2]=[N:3]-* 1E+10   
+[NH2:1]~[NH1:2]~[NH1:3]~* >> [N-:1]=[N+:2]=[N:3]-* 1E+10
+[NH1:1]~[ND2:2]~[NH1:3]~* >> [N-:1]=[N+:2]=[N:3]-* 1E+10
+
+#nitro group (-NO2)
+[O:1]=[N:2]-[O:3] >> [O:1]=[N+:2]-[O-:3]  1E+10
+[O:1]-[N:2]-[O:3] >> [O:1]=[N+:2]-[O-:3]  1E+10
+
+#hydroxamic acid
+#TRANSFORM O=CN[OD1-0:1][#1:2] >> O=CN[O-:1]				8.0
+O=CN[OD1-0:1]     >> O=CN[O-:1]				8.0
+
+#sulfinic acid
+[SD3](=O)[OD1:1]   >> [SD3](=O)[O-:1]				2.0
+[SD3](=O)[O:1][#1:2] >> [SD3](=O)[O-:1]			2.0
+
+#sulfonic acid
+[SD4]([!D1])(=O)(=O)[OD1:1] >> [SD4]([!D1])(=O)(=O)[O-:1]	-2.6
+[SD4]([!D1])(=O)(=O)[O:1][#1:2] >> [SD4]([!D1])(=O)(=O)[O-:1]	-2.6
+#sulfuric acid (same as sulfonic acid...)
+#TRANSFORM [SD4]([!D1])(=O)(=O)[OD1:1] >> [SD4]([!D1])(=O)(=O)[O-:1]
+#TRANSFORM [SD4]([!D1])(=O)(=O)[O:1][#1:2] >> [SD4]([!D1])(=O)(=O)[O-:1]
+
+#guanidine or amidine
+[#6^2+0:1](=[N^2+0:2])(~[N^2:3])* >> [#6:1](=[N+1:2])(~[N:3])*		12.5
+
+#phosphate ester
+[PD4](=O)([OD2])([OD2])[OD1:1] >> [PD4](=O)([OD2])([OD2])[O-:1]	2.0
+
+# phosphonate
+[PD4](=O)([OD2])([!#8])[OD1:1] >> [PD4](=O)([OD2])([!#8])[O-:1]	2.2
+# http://research.chem.psu.edu/brpgroup/pKa_compilation.pdf
+
+#phosphoric acid
+O=P([!D1])([O:1][#1:2])[OD1]       >> O=P([!D1])([O:1])O		2.12
+O=P([*D2,*D3])([OD1:1])[OD1:2] >> O=P([*D2,*D3])([O-:1])[O-:2]	2.12
+#phosphate
+
+#
+#	Amino acids
+#									pKa sidechain
+# aspartic acid
+#TRANSFORM O=CC(N)CC(=O)O[#1:1] >> O=CC(N)CC(=O)O			3.8
+O=C(O)C(N)CC(=O)[OD1:1] >> O=C(O)C(N)CC(=O)[O-:1]		3.8 
+O=C(NCC=O)C(N)CC(=O)[OD1:1] >> O=C(NCC=O)C(N)CC(=O)[O-:1]     3.8 
+
+# glutamic acid
+#TRANSFORM O=CC(N)CCC(=O)O[#1:1] >> O=CC(N)CCC(=O)O		        4.3
+O=C(O)C(N)CCC(=O)[OD1:1] >> O=C(O)C(N)CCC(=O)[O-:1]		5.0
+O=C(NCC=O)C(N)CCC(=O)[OD1:1] >> O=C(NCC=O)C(N)CCC(=O)[O-:1]	5.0
+
+# arginine
+O=C(O)C(N)CCCNC(N)=[N:1] >> O=C(O)C(N)CCCNC(N)=[N+:1] 	12.0
+O=C(NCC=O)C(N)CCCNC(N)=[N:1] >> O=C(NCC=O)C(N)CCCNC(N)=[N+:1] 12.0
+
+# lysine
+O=C(O)C(N)CCCC[N:1] >> O=C(O)C(N)CCCC[N+:1] 			10.5
+O=C(NCC=O)C(N)CCCC[N:1] >> O=C(NCC=O)C(N)CCCC[N+:1] 	        10.5
+
+# histidine
+O=C(O)C(N)Cc1[nH0:1]c[nH]c1  >> O=C(O)C(N)Cc1[n+:1]c[nH]c1            6.08
+O=C(O)C(N)Cc1[nH]c[nH0:1]c1  >> O=C(O)C(N)Cc1[nH]c[n+:1]c1            6.08
+O=C(NCC=O)C(N)Cc1[nH0:1]c[nH]c1  >> O=C(NCC=O)C(N)Cc1[n+:1]c[nH]c1    6.08
+
+# cysteine
+O=C(O)C(N)C[S:1]  >> O=C(O)C(N)C[S-:1]			 8.28
+O=C(NCC=O)C(N)C[S:1]  >> O=C(NCC=O)C(N)C[S-:1]		 8.28
+
+# tyrosine
+O=C(O)C(N)Cc1ccc([O:1])cc1  >> O=C(O)C(N)Cc1ccc([O-:1])cc1	        10.1
+O=C(NCC=O)C(N)Cc1ccc([O:1])cc1  >> O=C(NCC=O)C(N)Cc1ccc([O-:1])cc1    10.1
+

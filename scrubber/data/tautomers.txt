@@ -1,0 +1,4 @@
+[#6X{2-3}z{0-1},N,n,S,s,O,o,Se,Te:1]:,=[NX2,nX2,#6X3,c,P,p:2][Nh,nh,Sh,Oh,Seh,Teh:3]>>[#1][CX4z{0-1},#7,S,O,Se,Te:1][#7X2,CX3z{0-1},#6,P,p:2]=[#7,#16,#8,Se,Te:3] P-06
+[CX4z{0-1}h,Nh,nh,Sh,Oh,Seh,Teh:1][NX2,nX2,CX3z{0-1},c,P,p:2]:,=[N,n,S,s,O,o,Se,Te:3]>>[CX{2-3}z{0-1},N,n,S,s,O,o,Se,Te:1]=[NX2,nX2,CX3,c,P,p:2][N,n,S,O,Se,Te:3][#1] P-06r
+[nX2,NX2,S,O,Se,Te:1]=,:[C,c,nX2,NX2:6][C,c,NX2,nX2:5]=,:[C,c,nX2,NX2:2][Nh,nh,Sh,sh,Oh,oh,Seh,Teh:3]>>[#1][N,S,O,Se,Te:1][C,NX2:6]=,:[C,N:5][C,#7X2:2]=,:[NX2,S,O,Se,Te:3] P-07
+[nX2,NX2,S,O,Se,Te,Cz0X3:1]:,=[c,C,NX2,nX2:6][C,c,NX2,nX2:5]:,=[C,c,NX2,nX2:2][C,c,NX2,nX2:7]:,=[C,c,NX2,nX2:8][Nh,nh,Sh,sh,Oh,oh,Seh,Teh,CX4z0h:3]>>[#1][N,n,S,O,Se,Te,Cz0X4:1][C,c,NX2,nX2:6]=[C,c:5][C,c,NX2,nX2:2]=[C,c,NX2,nX2:7][C,c,NX2,nX2:8]=[NX2,S,O,Se,Te,CX3z0:3] P-09

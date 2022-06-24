@@ -1,0 +1,8 @@
+# minimalistic pH model fixed from OB
+
+
+#carboxylic acid 
+[O:1]=[C:2][$([OH1,Oh1]):3]>> [O:1]=[C:2]-[OX1-1:3] 4.0 
+
+#amide
+[N^3-0;!$(N~[!#6;!#1]):1] >> [N+1:1]                            4.0
