@@ -340,7 +340,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         # find which transformations apply
         protomer_reactions = []
         for pattern, (rxn, rxn_pH) in self.__ph_model.items():
-            if isinstance(pH, int):
+            if pH[0] == pH[1]:
                 if rxn_pH >= pH[1]:
                     continue
             else:
