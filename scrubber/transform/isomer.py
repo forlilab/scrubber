@@ -340,8 +340,12 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         # find which transformations apply
         protomer_reactions = []
         for pattern, (rxn, rxn_pH) in self.__ph_model.items():
-            if rxn_pH >= pH:
-                continue
+            if isinstance(pH, int):
+                if rxn_pH >= pH[1]:
+                    continue
+            else:
+                if pH[0] <= rxn_pH >= pH[1]:
+                    continue
             protomer_reactions.append((pattern, rxn, rxn_pH))
         # sort transformations by decreasing pKa (TODO: maybe useful for the future)
         protomer_reactions = sorted(protomer_reactions, key=itemgetter(2))
