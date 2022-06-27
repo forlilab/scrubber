@@ -306,9 +306,11 @@ class MoleculeTransformations(object):
         """
         # counter for the max_iter counting
         _iter = 0
-        results = UniqueMoleculeContainer()
+        # results = UniqueMoleculeContainer()
         reaction_products = UniqueMoleculeContainer()
         consumed_reagents = UniqueMoleculeContainer()
+        visited = UniqueMoleculeContainer()
+        visited_pairs = set()
         try:
             for rxn_idx, (rxn_pattern, rxn_obj) in enumerate(reaction_list):
                 self._iterations += 1
@@ -324,12 +326,18 @@ class MoleculeTransformations(object):
                     reagents_pool += reaction_products
                     reaction_products.clear()
                     reagents_pool += consumed_reagents
+                    # print("WE START FROM HERE", len(reagents_pool), reagents_pool[0], "\n",mol2smi(reagents_pool[0]))
                 if len(reagents_pool) > max_results:
                     raise MaxResultsException
                 # loop this reaction until either no reagents are left, or no products are generated
                 while True:
                     # reaction_products.sealed = True
                     for reagent in reagents_pool:
+                        visited.add(reagent)
+                        if not (reagent,rxn_pattern) in visited_pairs:
+                            visited_pairs.add((reagent,rxn_pattern))
+                        else:
+                            continue
                         self._iterations += 1
                         _iter += 1
                         if _iter > max_iter:
@@ -349,6 +357,10 @@ class MoleculeTransformations(object):
                                 # skip molecules that have been discarded already
                                 if mol2smi(p) in self._discarded:
                                     continue
+                                if p in visited:
+                                    continue
+                                visited.add(p)
+                                visited_pairs.add((p, rxn_pattern))
                                 if preserve_mol_properties:
                                     copy_mol_properties(reagent, p, strict=False, include_name=True)
                                 reaction_products.add(PropertyMol(p))

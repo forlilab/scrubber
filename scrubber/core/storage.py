@@ -1,6 +1,7 @@
 import sys
 from io import BytesIO
 import pickle
+import re
 
 # TODO use cPickle
 import threading
@@ -213,6 +214,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
         preserve_properties: bool = True,  # preserve any extra properties found in the molecule
         comm_pipe: multiprocessing.Pipe=None,
         workers_count: int = 1,
+        # overwrite:bool=False,
         disable_rdkit_warnings: bool = True,
         _stop_at_defaults=False,
     ):
@@ -250,6 +252,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
         self.preserve_properties = preserve_properties
         self.comm_pipe = comm_pipe
         self.workers_count = workers_count
+        # self.overwrite = overwrite
         self.disable_rdkit_warnings = disable_rdkit_warnings
         if _stop_at_defaults:
             return
@@ -370,7 +373,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 pickle.dump(mol, sys.stdout.buffer)
             # self._counter += 1
 
-    def _get_outfname(self, mol):
+    def _get_outfname(self, mol,):
         """function to automate the output molecule name, and generate
         progressive subdirectories, if required"""
 
@@ -381,6 +384,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
         ext = self.out_format
         # get the name
         basename = []
+        # generate the file name
         if self.naming == "name":
             # extract the field from RDKit molecule
             # print("MOLSZZZ", mol.GetPropsAsDict())
@@ -396,7 +400,9 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 basename = "%s_%s" % (self._basename[0], self._counter)
             else:
                 basename = "%s_%s" % (default_name, self._counter)
-        # get the directory
+        if self.sanitize_name:
+            basename = self._sanitize_string(basename)
+        # generate the directory name
         if self.max_lig_per_dir > 0:
             if self._counter % self.max_lig_per_dir == 0:
                 self._dir_counter += 1
@@ -407,6 +413,9 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
             dirname = dirname[0]
         if not os.path.exists(dirname):
             os.makedirs(dirname)
+        # else:
+        #     if not self.overwrite:
+        #         raise FileExistsError
         fullpath = "%s%s%s.%s" % (dirname, os.path.sep, basename, ext)
         if os.path.exists(fullpath):
             attempt = 0
@@ -421,6 +430,22 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 )
                 # fullpath = "%s_v%d.%s" % (os.path.sep.join(dirname + basename), attempt, ext)
         return fullpath
+
+    def _sanitize_string(self, string):
+        """function to apply rules to generate a valid filename from a
+        molecular name"""
+        # replace spaces and tabs with underscore
+        # print("----------------")
+        # print("RECEIVED", string)
+        string = re.sub("\s+","_", string)
+        string = re.sub("\t+","_", string)
+        string = string.replace("{", "(")
+        string = string.replace("[", "(")
+        string = string.replace("]", ")")
+        string = string.replace("}", ")")
+        # print("PRODUCED", string)
+        # print("----------------")
+        return string
 
 
 class SDFMolSupplierWrapper(object):
@@ -610,45 +635,6 @@ class PipeMolSupplier(threading.Thread):
             unread_bytes = unread_buffer.read()
         print("DONE reading...")
         # raise StopIteration
-        self.buffer.put("terminate")
-        # self.buffer.put(None)
-
-    # def run(self):
-    #    try:
-    #        unread_bytes = sys.stdin.buffer.read()
-    #        while len(unread_bytes):
-    #            if self._stop:
-    #                #
-    #                self.buffer.put('terminate')
-    #                return
-    #            unread_buffer = BytesIO(unread_bytes)
-    #            header_byte = unread_buffer.getbuffer()[0]
-    #            if header_byte == PipeMolSupplier.PICKLE_HEADER:
-    #                try:
-    #                    io = pickle.load(unread_buffer)
-    #                    # if not isinstance(io, str ):
-    #                    #     break
-    #                    self.buffer.put(io)
-    #                    # print(">>>SENDING THIS:", io)
-    #                except pickle.UnpicklingError:
-    #                    print("FATAL ERROR UNPICKLING THIS MOLECULE!")
-    #                    # sys.exit(1)
-    #            else:
-    #                # just passing through...
-    #                print("UNREADEX", unread_bytes.decode())
-    #                unread_bytes = unread_buffer.read()
-    #                break
-    #            unread_bytes = unread_buffer.read()
-    #        print("DONE reading...")
-    #        # raise StopIteration
-    #        self.buffer.put('terminate')
-    #        # self.buffer.put(None)
-    #    except StopIteration:
-    #        # raise StopIteration
-    #        return
-    #    # raise StopIteration
-
-    #    # self.join()
 
     def __next__(self):
         """overloading this function"""

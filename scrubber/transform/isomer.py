@@ -48,7 +48,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         protomer_neutralize:bool = False,
         ## TAUTOMERS
         tautomer_enum: bool = True,
-        tautomer_max_results: int = 500,
+        tautomer_max_results: int = 50000,
         # tautomer_keep_all: bool = True,
         tautomer_protect_aromatic: bool = True,
         tautomer_protect_amide: bool = True,
