@@ -11,9 +11,7 @@ import os
 from rdkit import Chem, RDLogger
 from rdkit.Chem.PropertyMol import PropertyMol
 
-# from .core import ScrubberClass
-# from .base import ScrubberClass
-from scrubber import ScrubberClass
+from .common import ScrubberClass
 
 """ this file contains all the  molecule providers
     - files
@@ -355,7 +353,6 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
             elif self.mode == "split":
                 outfname = self._get_outfname(mol)
                 writer = self.out_format_file_writers["single"][self.out_format]
-
                 # this triggers a warning if done after the initialization
                 # of the writer therefore it requires the suppression of
                 # all the RDKit warnings

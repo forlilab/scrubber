@@ -4,9 +4,9 @@ from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 
 
-from scrubber import ScrubberClass, UniqueMoleculeContainer, mol2smi
+from ..common import ScrubberClass, UniqueMoleculeContainer, mol2smi
 # from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
-from . import (
+from .base import (
     MoleculeTransformations,
     MaxResultsException,
     MaxIterException,

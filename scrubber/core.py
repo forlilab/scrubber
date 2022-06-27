@@ -1,16 +1,16 @@
 import multiprocessing
 
 # from . import ScrubberClasss
-from scrubber.core.storage import MoleculeProvider, MoleculeStorage, SDFMolSupplierWrapper, SMIMolSupplierWrapper
-
-# storage import . import storage
-from scrubber.geom.geometry import ParallelGeometryGenerator  # , GeometryGenerator
-from scrubber.extra.filters import MoleculeFilter
-from scrubber.transform.isomer import MoleculeIsomers
-from scrubber.transform.reaction import Reactor
 
 from rdkit.Chem.PropertyMol import PropertyMol
 from time import sleep
+
+# storage import . import storage
+from .storage import MoleculeProvider, MoleculeStorage, SDFMolSupplierWrapper, SMIMolSupplierWrapper
+from .geom.geometry import ParallelGeometryGenerator  # , GeometryGenerator
+from .filters import MoleculeFilter
+from .transform.isomer import MoleculeIsomers
+from .transform.reaction import Reactor
 
 
 """
@@ -264,10 +264,15 @@ class ScrubberCore(object):
         #     else:
         #         self._send_poison_pills()
         print("[ saving all molecules... ]")
-        while self.mol_writer.is_alive():
-            sleep(0.1)
+        if not self.mol_writer.is_alive():
+            print("WRITER DEAD... trying to get the number...")
             if self._pipe_listener.poll():
                 written_count = self._pipe_listener.recv()
+        else:
+            while self.mol_writer.is_alive():
+                sleep(0.1)
+                if self._pipe_listener.poll():
+                    written_count = self._pipe_listener.recv()
         print("FINAL: %d input molecules processed" % counter)
         print(" total molecules written:: %d"% written_count)
         # x = self._target_queue.get()

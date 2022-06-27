@@ -7,7 +7,7 @@ from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.PropertyMol import PropertyMol
 
-from scrubber import ScrubberClass, copy_mol_properties
+from ..common import ScrubberClass, copy_mol_properties
 
 
 class GeometryGenerator(ScrubberClass):

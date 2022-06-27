@@ -1,7 +1,7 @@
 import sys, os
 sys.path.append("../")
 try:
-    from scrubber.core.scrubbercore import ScrubberCore
+    from scrubber.core import ScrubberCore
 except Exception as e:
     print("The script must be executed from the script/ directory")
     raise e

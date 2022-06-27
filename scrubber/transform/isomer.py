@@ -8,11 +8,11 @@ from rdkit.Chem.EnumerateStereoisomers import (
     GetStereoisomerCount,
 )
 
-from scrubber import ScrubberClass, UniqueMoleculeContainer, mol2smi
+from ..common import ScrubberClass, UniqueMoleculeContainer, mol2smi
 # from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
 
 
-from . import (
+from .base import (
     MoleculeTransformations,
     MaxResultsException,
     MaxIterException,

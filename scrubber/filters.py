@@ -1,6 +1,7 @@
 # from scrubber import get_datafile
 
-from scrubber import ScrubberClass
+from rdkit import Chem
+from .common import ScrubberClass
 
 
 PAINS_FILES = {
