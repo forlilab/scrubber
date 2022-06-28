@@ -15,7 +15,8 @@ DATA_PATH = os.path.join(os.path.dirname(__file__), DATA_DIR)
 
 # an rdkit mol instance is this: Chem.rdchem.Mol
 
-__all__ = ['DATA_PATH', "ScrubberClass", "UniqueMoleculeContainer"]
+__all__ = ["DATA_PATH", "ScrubberClass", "UniqueMoleculeContainer"]
+
 
 class ScrubberClass(object):
     """abstract class with the basic functionality that most (all?) scrubber
@@ -37,13 +38,14 @@ class ScrubberClass(object):
     >>> scrubber_class_options['key'] = False
     >>> sc = ScrubberClassNew(**scrubber_class_options)
     """
+
     # TODO consider moving to this format to store also possible options and description?
 
     # default_init = {"key1": {"value": True, "options": bool}}
     # default_options = {"key": {"value": True, "options": bool}}
     # default_init = {}
 
-    def __init__(self, arguments, _stop_at_defaults:bool=False):
+    def __init__(self, arguments, _stop_at_defaults: bool = False):
         """generic implementation of the init;
         inheriting classes will implement their own args, but keep the
         __stop_at_defaults flag to support the get_defaults() class method and
@@ -58,7 +60,7 @@ class ScrubberClass(object):
 
     @classmethod
     def get_defaults(cls):
-        """ method to return the default values of init options """
+        """method to return the default values of init options"""
         return cls(_stop_at_defaults=True).__dict__
 
     def get_datafile(self, fname: str) -> str:
@@ -69,8 +71,7 @@ class ScrubberClass(object):
             msg = (
                 "ERROR: the specified filename [%s] "
                 "does not exist in the data "
-                "directory [%s]" % (fname,
-                DATA_PATH),
+                "directory [%s]" % (fname, DATA_PATH),
             )
             raise ValueError(msg)
         return fullpath
@@ -116,6 +117,7 @@ class ScrubberClass(object):
     #             self.__recursive_dict_match(v, curr_target[k])
     #         else:
     #             curr_target[k] = v
+
 
 class UniqueMoleculeContainer(object):
     """Class to store RDKit molecules without duplicates. Use isomeric
@@ -251,7 +253,9 @@ class UniqueMoleculeContainer(object):
         <Chem.rdchem.Mol object at 0x1462f1e36be0>  # mol2
     """
 
-    def __init__(self, argument=None, sealed:bool=True, ignore_chirality:bool=False):
+    def __init__(
+        self, argument=None, sealed: bool = True, ignore_chirality: bool = False
+    ):
         self.__data = {}
         self.sealed = sealed
         self.__chirality = not ignore_chirality
@@ -272,7 +276,7 @@ class UniqueMoleculeContainer(object):
                     % type(argument)
                 )
 
-    def add(self, mol:Chem.rdchem.Mol, replace=False)->bool:
+    def add(self, mol: Chem.rdchem.Mol, replace=False) -> bool:
         """add molecule if not present already; if replace==False, then the
         molecule is replaced with the new mol object"""
         # key = Chem.MolToSmiles(Chem.RemoveHs(mol), isomericSmiles=self.__chirality)
@@ -283,7 +287,7 @@ class UniqueMoleculeContainer(object):
         self.sealed = False
         return True
 
-    def remove_smiles(self, smiles:str) ->bool:
+    def remove_smiles(self, smiles: str) -> bool:
         """remove a molecule using a SMILES string and return True, otherwise
         False is returned"""
         try:
@@ -293,14 +297,14 @@ class UniqueMoleculeContainer(object):
         except:
             return False
 
-    def remove_mol(self, mol:Chem.rdchem.Mol) ->bool:
+    def remove_mol(self, mol: Chem.rdchem.Mol) -> bool:
         """remove a Chem.RDKit molecule specified explicitly and return True, otherwise
         False is returned"""
         # smiles = Chem.MolToSmiles(Chem.RemoveHs(mol), isomericSmiles=self.__chirality)
         smiles = mol2smi(mol, self.__chirality)
         return self.remove_smiles(smiles)
 
-    def remove_mols(self, mol_list:list)->bool:
+    def remove_mols(self, mol_list: list) -> bool:
         """remove a list of RDKit molecules"""
         if mol_list == []:
             return True
@@ -310,8 +314,7 @@ class UniqueMoleculeContainer(object):
                 success = False
         return success
 
-
-    def remove_from_indices(self, indices_list:list) ->str:
+    def remove_from_indices(self, indices_list: list) -> str:
         """remove a list of indices and return the corresponding SMILES"""
         keys_list = list(self.__data.keys())
         smi_list = [keys_list[i] for i in indices_list]
@@ -348,7 +351,7 @@ class UniqueMoleculeContainer(object):
                 msg = "Valid index must be between 0 and %d, but %d was used." % (
                     size,
                     index,
-                    )
+                )
             raise IndexError(msg)
 
     def copy(self):
@@ -483,13 +486,21 @@ class UniqueMoleculeContainer(object):
                 new.add(mol)
         return new
 
+
 def mol2smi(mol, chirality=True):
     """convenience function to generate RDKit canonical and isomeric SMILES"""
     return Chem.MolToSmiles(
         Chem.RemoveHs(mol), isomericSmiles=chirality, canonical=True
     )
 
-def copy_mol_properties(mol_source, mol_dest, strict:bool=False, include_name:bool=True, exclude:list=None):
+
+def copy_mol_properties(
+    mol_source,
+    mol_dest,
+    strict: bool = False,
+    include_name: bool = True,
+    exclude: list = None,
+):
     """convenience function to copy properties from a molecule to another; if
     strict mode is requested, only molecules in the source molecule will be
     kept in the destination molecule; an optional list of excluded properties
@@ -506,13 +517,13 @@ def copy_mol_properties(mol_source, mol_dest, strict:bool=False, include_name:bo
         if p in exclude:
             continue
         if type(v) == int:
-            mol_dest.SetIntProp(p,v)
+            mol_dest.SetIntProp(p, v)
         elif type(v) == bool:
-            mol_dest.SetBoolProp(p,v)
+            mol_dest.SetBoolProp(p, v)
         elif type(v) == float:
-            mol_dest.SetDoubleProp(p,v)
+            mol_dest.SetDoubleProp(p, v)
         elif type(v) == str:
-            mol_dest.SetProp(p,v)
+            mol_dest.SetProp(p, v)
     if include_name:
         if not mol_source.HasProp("_Name"):
             return

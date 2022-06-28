@@ -274,7 +274,6 @@ class ParallelGeometryGenerator(object):
         else:
             self._queue_size = self.max_proc
         for i in range(self.max_proc):
-            # print("DOING THIS", self.queue_in, s)
             w = GeometryGeneratorMPWorker(
                 self.queue_in,
                 self.queue_out,
@@ -304,7 +303,3 @@ class ParallelGeometryGenerator(object):
         for i in range(self._queue_size):
             self.queue_out.put(None)
 
-    # def stop_calculations(self):
-    #     """  """
-    #     # self.queue_in.put(q, block=True)
-    #     self.queue_in.put(None)

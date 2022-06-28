@@ -44,14 +44,14 @@ class MoleculeProvider(ScrubberClass):
         self,
         fname=None,
         ftype=None,
-        pipe: bool = False,
+        pipe: bool = False, # not yet supported...
         sanitize: bool = True,
         removeHs: bool = False,
         strictParsing: bool = True,
-        preserve_properties: bool = True,
+        # preserve_properties: bool = True,
         name_property:str= None,
-        wrapped: bool = True,
-        discarded_data_file: str = None,
+        safeparsing: bool = True,
+        discarded_datafile: str = None,
         # use_PropertyMol: bool = True,
         start_count: int = 0,
         end_count: int = -1,
@@ -63,10 +63,10 @@ class MoleculeProvider(ScrubberClass):
         self.sanitize = sanitize
         self.removeHs = removeHs
         self.strictParsing = strictParsing
-        self.preserve_properties = preserve_properties
+        # self.preserve_properties = preserve_properties
         self.name_property = name_property
-        self.wrapped = wrapped
-        self.discarded_data_file = discarded_data_file
+        self.safeparsing = safeparsing
+        self.discarded_datafile = discarded_datafile
         # self.use_PropertyMol = use_PropertyMol
         self.start_count = start_count
         self.end_count = end_count
@@ -97,13 +97,13 @@ class MoleculeProvider(ScrubberClass):
                 )
                 raise ValueError(msg)
             if self.ftype == "sdf":
-                if self.wrapped:
+                if self.safeparsing:
                     self._source = SDFMolSupplierWrapper(
                         fname,
                         sanitize=self.sanitize,
                         removeHs=self.removeHs,
                         strictParsing=self.strictParsing,
-                        discarded_data_file=self.discarded_data_file,
+                        discarded_datafile=self.discarded_datafile,
                     )
                 else:
                     self._source = Chem.SDMolSupplier(
@@ -113,7 +113,7 @@ class MoleculeProvider(ScrubberClass):
                         strictParsing=self.strictParsing,
                     )
             elif self.ftype == "smi":
-                if self.wrapped:
+                if self.safeparsing:
                     self._source = SMIMolSupplierWrapper(
                         fname, sanitize=self.sanitize, titleLine=False
                     )
@@ -122,7 +122,7 @@ class MoleculeProvider(ScrubberClass):
                         fname,
                         sanitize=self.sanitize,
                         titleLine=False,
-                        discarded_data_file=self.discarded_data_file,
+                        discarded_datafile=self.discarded_datafile,
                     )
 
     def __iter__(self):
@@ -139,7 +139,7 @@ class MoleculeProvider(ScrubberClass):
                     continue
                 if (not self.end_count == -1) and (self._counter > self.end_count):
                     # print("SKIPPING END")
-                    if self.wrapped:
+                    if self.safeparsing:
                         self._source._close_fp()
                     raise StopIteration
                 if not next_mol is None:
@@ -163,7 +163,7 @@ class MoleculeProvider(ScrubberClass):
                 else:
                     self._counter_problematic += 1
         except StopIteration:
-            if self.wrapped:
+            if self.safeparsing:
                 self._source._close_fp()
             raise StopIteration
 
@@ -201,19 +201,18 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
     def __init__(
         self,
         mode: str = "single",  # "single", "split", "pipe"
-        out_fname: str = None,
-        out_format: str = None,  # smi, sdf, None (auto)
-        out_format_opts: dict = out_format_opts_default,
+        fname: str = None,
+        ftype: str = None,  # smi, sdf, None (auto)
+        format_opts: dict = out_format_opts_default,
         naming: str = "auto",  # auto, (progressive), name (molname)
         naming_field: str = "",
         max_lig_per_dir=0,  # it not 0, create automatically subdirectories each [max_lig_per_dir] ligands
-        sanitize_name: bool = True,  # remove all
-        queue: multiprocessing.Queue = None,
-        preserve_properties: bool = True,  # preserve any extra properties found in the molecule
-        comm_pipe: multiprocessing.Pipe=None,
+        disable_name_sanitize: bool = False,  # disable sanitizing output filename (based on mol name)
+        disable_preserve_properties: bool = False,  # disable preserving any extra properties found in the molecule
         workers_count: int = 1,
-        # overwrite:bool=False,
-        disable_rdkit_warnings: bool = True,
+        # disable_rdkit_warnings: bool = True,
+        queue: multiprocessing.Queue = None,
+        comm_pipe: multiprocessing.Pipe=None,
         _stop_at_defaults=False,
     ):
         """
@@ -239,23 +238,24 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
 
         """
         self.mode = mode
-        self.out_fname = out_fname
-        self.out_format = out_format
-        self.out_format_opts = out_format_opts
+        self.fname = fname
+        self.ftype = ftype
+        self.format_opts = format_opts
         self.naming = naming
         # self.naming_field = naming_field
         self.max_lig_per_dir = max_lig_per_dir
-        self.sanitize_name = sanitize_name
-        self.queue = queue
-        self.preserve_properties = preserve_properties
-        self.comm_pipe = comm_pipe
+        self.disable_name_sanitize = disable_name_sanitize
+        self.disable_preserve_properties = disable_preserve_properties
         self.workers_count = workers_count
         # self.overwrite = overwrite
-        self.disable_rdkit_warnings = disable_rdkit_warnings
+        # self.disable_rdkit_warnings = disable_rdkit_warnings
+        self.queue = queue
+        self.comm_pipe = comm_pipe
         if _stop_at_defaults:
             return
-        if self.disable_rdkit_warnings:
-            RDLogger.DisableLog("rdApp.*")
+        RDLogger.DisableLog("rdApp.*")
+        # if self.disable_rdkit_warnings:
+        #     RDLogger.DisableLog("rdApp.*")
         multiprocessing.Process.__init__(self)
         self._counter = 0
         self._dir_counter = 0
@@ -267,34 +267,34 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                     "Warning: naming scheme requested [%s] will be ignored in 'single' mode"
                     % self.naming
                 )
-            if self.out_fname is None:
+            if self.fname is None:
                 raise ValueError("Filename must be specified in 'single' mode")
-            self._basename, self._ext = os.path.splitext(self.out_fname)
+            self._basename, self._ext = os.path.splitext(self.fname)
             self._ext = self._ext[1:].lower()
-            if self.out_format is None:
-                self.out_format = self._ext
-            if not self.out_format in VALID_FORMATS:
+            if self.ftype is None:
+                self.ftype = self._ext
+            if not self.ftype in VALID_FORMATS:
                 raise ValueError(
                     "Invalid outpuf file format: current(%s), "
                     "accepted (%s)" % (self._ext, ",".join(VALID_FORMATS))
                 )
-            self.writer = self.out_format_file_writers[self.mode][self.out_format](
-                self.out_fname, **self.out_format_opts[self.mode][self.out_format]
+            self.writer = self.out_format_file_writers[self.mode][self.ftype](
+                self.fname, **self.format_opts[self.mode][self.ftype]
             )
         # in single mode many things can happen...
         elif self.mode == "split":
-            if self.out_fname is None:
+            if self.fname is None:
                 self._basedir = os.path.curdir
                 self._basename = []
                 self._ext = None
             else:
-                self._basedir = os.path.dirname(self.out_fname)
-                name, ext = os.path.splitext(self.out_fname)
+                self._basedir = os.path.dirname(self.fname)
+                name, ext = os.path.splitext(self.fname)
                 self._basename = [os.path.basename(name)]
                 self._ext = ext[1:].lower()
-            if self.out_format is None:
-                self.out_format = self._ext
-            if not self.out_format in VALID_FORMATS:
+            if self.ftype is None:
+                self.ftype = self._ext
+            if not self.ftype in VALID_FORMATS:
                 raise ValueError(
                     "Invalid outpuf file format: current(%s), "
                     "accepted (%s)" % (self._ext, ",".join(VALID_FORMATS))
@@ -339,20 +339,20 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 sys.exit(1)
             if self.mode == "single":
                 # save all non-private properties in the current molecule
-                if self.preserve_properties and self.out_format == "sdf":
+                if not self.disable_preserve_properties and self.ftype == "sdf":
                     # this triggers a warning if done after the initialization
                     # of the writer therefore it requires the suppression of
                     # all the RDKit warnings
-                    if not self.disable_rdkit_warnings:
-                        RDLogger.DisableLog("rdApp.*")
+                    # if not self.disable_rdkit_warnings:
+                        # RDLogger.DisableLog("rdApp.*")
                     self.writer.SetProps(mol.GetPropNames())
-                    if not self.disable_rdkit_warnings:
-                        RDLogger.EnableLog("rdApp.*")
+                    # if not self.disable_rdkit_warnings:
+                    #     RDLogger.EnableLog("rdApp.*")
                 self._counter+=1
                 self.writer.write(mol)
             elif self.mode == "split":
                 outfname = self._get_outfname(mol)
-                writer = self.out_format_file_writers["single"][self.out_format]
+                writer = self.out_format_file_writers["single"][self.ftype]
                 # this triggers a warning if done after the initialization
                 # of the writer therefore it requires the suppression of
                 # all the RDKit warnings
@@ -378,13 +378,12 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
 
         default_name = "MOL"
         dirname = [self._basedir]
-        ext = self.out_format
+        ext = self.ftype
         # get the name
         basename = []
         # generate the file name
         if self.naming == "name":
             # extract the field from RDKit molecule
-            # print("MOLSZZZ", mol.GetPropsAsDict())
             basename = mol.GetProp("_Name")
         # elif self.naming == "field":
         #     # extract the name from RDKit molecule
@@ -397,7 +396,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 basename = "%s_%s" % (self._basename[0], self._counter)
             else:
                 basename = "%s_%s" % (default_name, self._counter)
-        if self.sanitize_name:
+        if not self.disable_name_sanitize:
             basename = self._sanitize_string(basename)
         # generate the directory name
         if self.max_lig_per_dir > 0:
@@ -457,14 +456,14 @@ class SDFMolSupplierWrapper(object):
         sanitize: bool = True,
         removeHs: bool = False,
         strictParsing: bool = True,
-        discarded_data_file: str = None,
+        discarded_datafile: str = None,
         _stop_at_defaults: bool = False,
     ):
         self.filename = filename
         self.sanitize = sanitize
         self.removeHs = removeHs
         self.strictParsing = strictParsing
-        self.discarded_data_file = discarded_data_file
+        self.discarded_datafile = discarded_datafile
         if _stop_at_defaults:
             return
         self.fp_input = open(filename, "r")
@@ -500,10 +499,10 @@ class SDFMolSupplierWrapper(object):
                         break  # go to last try/except
                     except:
                         self._counter_problematic += 1
-                        if self.discarded_data_file is None:
+                        if self.discarded_datafile is None:
                             continue
                         if self.fp_errors is None:
-                            self.fp_errors = open(self.discarded_data_file, "w")
+                            self.fp_errors = open(self.discarded_datafile, "w")
                         buff = "\n".join(self._buff)
                         self.fp_errors.write(buff + "\n")
                         return None
@@ -528,9 +527,9 @@ class SDFMolSupplierWrapper(object):
             )
             return mol
         except:
-            if not self.discarded_data_file is None:
+            if not self.discarded_datafile is None:
                 if self.fp_errors is None:
-                    self.fp_errors = open(self.discarded_data_file)
+                    self.fp_errors = open(self.discarded_datafile)
                 buff = "\n".join(self._buff)
                 self.fp_errors.write(buff + "\n")
             return None
