@@ -143,6 +143,7 @@ class ScrubberCore(object):
             self.options["geometry"]["values"]["queue_in"] = self.queue_in
             self.options["geometry"]["values"]["queue_out"] = self.queue_out
             self.options["geometry"]["values"]["nice_level"] = nice
+            self.options["geometry"]["values"]["max_proc"] = self.max_proc
             self.geometry_optimize = ParallelGeometryGenerator(
                 **self.options["geometry"]["values"]
             )
