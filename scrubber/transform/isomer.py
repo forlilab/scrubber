@@ -36,54 +36,64 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
     def __init__(
         self,
         ## STEREOISOMERS
-        stereoisomer_enum: bool = False,
-        stereoisomer_max_results: int = 50,
-        stereoisomer_gen3d: bool = False,  # MOVE TO STEREO?
+        stereo_enum: bool = False,
+        stereo_max_results: int = 50,
+        stereo_gen3d: bool = False,  # MOVE TO STEREO?
         ## PROTOMERS
-        protomer_enum: bool = True,
-        protomer_pH: float = 7.4,
-        protomer_max_results: int = 50,
-        protomer_keep_all: bool = False,
-        protomer_max_net_charge: int = 5,
-        protomer_neutralize:bool = False,
+        proto_enum: bool = True,
+        # TODO have two separate options for single pH and pH range?
+        proto_pH: float = 7.4,
+        proto_max_results: int = 50,
+        proto_keep_all: bool = False,
+        proto_max_net_charge: int = 5,
+        proto_neutralize:bool = False,
         ## TAUTOMERS
-        tautomer_enum: bool = True,
-        tautomer_max_results: int = 50000,
-        # tautomer_keep_all: bool = True,
-        tautomer_protect_aromatic: bool = True,
-        tautomer_protect_amide: bool = True,
+        tauto_enum: bool = True,
+        tauto_max_results: int = 50000,
+        # tauto_keep_all: bool = True,
+        tauto_protect_aromatic: bool = True,
+        tauto_protect_amide: bool = True,
         ## GENERIC
         add_hydrogens: bool = True,
-        max_iter: int = 10,
+        max_cycles: int = 10,
         # max_iter:50,
         verbose: bool = False,
         ph_datafile: str = None,
-        tautomer_datafile: str = None,
+        tauto_datafile: str = None,
         suppress_rdkit_warnings: bool = True,
         _stop_at_defaults: bool = False,
     ):
-        self.stereoisomer_enum = stereoisomer_enum
-        self.stereoisomer_max_results = stereoisomer_max_results
-        self.stereoisomer_gen3d = stereoisomer_gen3d
-        self.protomer_enum = protomer_enum
-        self.protomer_pH = protomer_pH
-        self.protomer_max_results = protomer_max_results
-        self.protomer_keep_all = protomer_keep_all
-        self.protomer_max_net_charge = protomer_max_net_charge
-        self.protomer_neutralize = protomer_neutralize
-        self.tautomer_enum = tautomer_enum
-        self.tautomer_max_results = tautomer_max_results
-        # self.tautomer_keep_all = tautomer_keep_all
-        self.tautomer_protect_aromatic = tautomer_protect_aromatic
-        self.tautomer_protect_amide = tautomer_protect_amide
+        self.stereo_enum = stereo_enum
+        self.stereo_max_results = stereo_max_results
+        self.stereo_gen3d = stereo_gen3d
+        self.proto_enum = proto_enum
+        self.proto_pH = proto_pH
+        self.proto_max_results = proto_max_results
+        self.proto_keep_all = proto_keep_all
+        self.proto_max_net_charge = proto_max_net_charge
+        self.proto_neutralize = proto_neutralize
+        self.tauto_enum = tauto_enum
+        self.tauto_max_results = tauto_max_results
+        # self.tauto_keep_all = tauto_keep_all
+        self.tauto_protect_aromatic = tauto_protect_aromatic
+        self.tauto_protect_amide = tauto_protect_amide
         self.add_hydrogens = add_hydrogens
-        self.max_iter = max_iter
+        self.max_cycles = max_cycles
         self.verbose = verbose
         self.ph_datafile = ph_datafile
-        self.tautomer_datafile = tautomer_datafile
+        self.tauto_datafile = tauto_datafile
         self.suppress_rdkit_warnings = suppress_rdkit_warnings
         if _stop_at_defaults:
             return
+        valid_isomer = [False, "undefined", "all"]
+        if not self.stereo_enum in valid_isomer:
+            raise ValueError(
+                "steroisomer enumeration can be any of these [%s], not %s"
+                % (
+                    ", ".join([str(x) for x in valid_isomer]),
+                    str(self.stereo_enum),
+                )
+            )
         # self._build_opts_dict()
         MoleculeTransformations.__init__(
             self,
@@ -92,19 +102,19 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         )
         self.__init_data(
             ph_datafile=self.ph_datafile,
-            tautomer_datafile=self.tautomer_datafile,
+            tauto_datafile=self.tauto_datafile,
         )
-        if isinstance(self.protomer_pH, int):
-            self.protomer_pH = [self.protomer_pH, self.protomer_pH]
-        elif isinstance(self.protomer_pH, list):
-            self.protomer_pH = [self.protomer_pH[0], self.protomer_pH[1]]
+        if isinstance(self.proto_pH, int):
+            self.proto_pH = [self.proto_pH, self.proto_pH]
+        elif isinstance(self.proto_pH, list):
+            self.proto_pH = [self.proto_pH[0], self.proto_pH[1]]
 
 
     def __init_data(
-        self, ph_datafile: str = None, tautomer_datafile: str = None
+        self, ph_datafile: str = None, tauto_datafile: str = None
     ) -> None:
         """initialize data files for transformations"""
-        self.__init_tautomers(tautomer_datafile)
+        self.__init_tautomers(tauto_datafile)
         self.__init_protomers(ph_datafile)
 
     def __init_protomers(self, fname: str = None) -> None:
@@ -124,12 +134,12 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
 
     def __init_tautomers(self, fname: str = None) -> None:
         """initialize the transformations for tautomers"""
-        self.__tautomer_model = {}
+        self.__tauto_model = {}
         if fname is None:
             fname = self.get_datafile(TAUTOMERS_DATAFILE)
         reactions, errors = self._parse_reaction_file(fname)
         for rxn, _, _, name in reactions:
-            self.__tautomer_model[name] = [rxn]
+            self.__tauto_model[name] = [rxn]
             if self.verbose:
                 print("[VERBOSE] TAUTOMERS: added model [%s] [ %s ]" % (name, rxn))
 
@@ -138,15 +148,6 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         mol,
     ) -> list:
         """apply all transformations"""
-        valid_isomer = [False, "undefined", "all"]
-        if not self.stereoisomer_enum in valid_isomer:
-            raise ValueError(
-                "steroisomer enumeration can be any of these [%s], not %s"
-                % (
-                    ", ".join([str(x) for x in valid_isomer]),
-                    str(self.stereoisomer_enum),
-                )
-            )
         # print("WORKING ON", mol2smi(mol))
         success_record = []
         self.reaction_log = MolecularReactionsLogger(self.verbose)
@@ -161,17 +162,17 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         while True:
             if (not self._iterations == 0) and (self.mol_pool.sealed == True):
                 break
-            if self.protomer_enum:
+            if self.proto_enum:
                 if self.verbose:
                     print(
                         "[VERBOSE] Calling protomer generation, round:",
                         self.__process_iter,
                     )
                 success = self.enumerate_protomers(
-                    self.protomer_pH,
-                    self.protomer_max_results,
-                    self.protomer_keep_all,
-                    self.protomer_max_net_charge,
+                    self.proto_pH,
+                    self.proto_max_results,
+                    self.proto_keep_all,
+                    self.proto_max_net_charge,
                 )
                 # store the status of the last operation
                 success_record.append((success, self._iterations, "protomer"))
@@ -182,16 +183,16 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
                     )
             # seal the container to track for modifications
             self.mol_pool.sealed = True
-            if self.tautomer_enum:
+            if self.tauto_enum:
                 if self.verbose:
                     print(
                         "[VERBOSE] Calling tautomer generation round:",
                         self.__process_iter,
                     )
                 success = self.enumerate_tautomers(
-                    self.tautomer_max_results,
-                    self.tautomer_protect_aromatic,
-                    self.tautomer_protect_amide,
+                    self.tauto_max_results,
+                    self.tauto_protect_aromatic,
+                    self.tauto_protect_amide,
                 )
                 success_record.append((success, self._iterations, "tautomer"))
                 if self.verbose:
@@ -200,7 +201,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
                         % (self.__process_iter, success, len(self.mol_pool))
                     )
             self.__process_iter += 1
-            if self.__process_iter > self.max_iter:
+            if self.__process_iter > self.max_cycles:
                 if self.verbose:
                     print(
                         "[VERBOSE] Seal not broken, no more things to do"
@@ -210,8 +211,8 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
                     (False, self._iterations, "proto/tauto loop interrupted")
                 )
                 break
-            if (not self.protomer_enum) or (
-                not self.tautomer_enum
+            if (not self.proto_enum) or (
+                not self.tauto_enum
             ):
                 if self.verbose:
                     print("[VERBOSE] either tautomers or protomers are not requested")
@@ -223,11 +224,11 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             else:
                 self.mol_pool.sealed = True
         ##### isomers
-        if self.stereoisomer_enum is not False:
+        if self.stereo_enum is not False:
             success = self.enumerate_stereoisormers(
-                mode=self.stereoisomer_enum,
-                max_results=self.stereoisomer_max_results,
-                gen3d=self.stereoisomer_gen3d,
+                mode=self.stereo_enum,
+                max_results=self.stereo_max_results,
+                gen3d=self.stereo_gen3d,
             )
             success_record.append((success, self._iterations, "stereoisomer"))
             if self.verbose:
@@ -282,7 +283,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         if len(results):
             # updating counters for naming
             for mol in results:
-                self._set_scrubber_property(mol, "Scrubber_stereoisomer_count")
+                self._set_scrubber_property(mol, "Scrubber_stereo_count")
             self.mol_pool = results
             if self.verbose:
                 print("[VERBOSE] %d enantiomers" % len(results))
@@ -338,7 +339,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             self.mol_pool = container
             return
         # find which transformations apply
-        protomer_reactions = []
+        proto_reactions = []
         for pattern, (rxn, rxn_pH) in self.__ph_model.items():
             if pH[0] == pH[1]:
                 if rxn_pH >= pH[1]:
@@ -346,13 +347,13 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             else:
                 if pH[0] <= rxn_pH >= pH[1]:
                     continue
-            protomer_reactions.append((pattern, rxn, rxn_pH))
+            proto_reactions.append((pattern, rxn, rxn_pH))
         # sort transformations by decreasing pKa (TODO: maybe useful for the future)
-        protomer_reactions = sorted(protomer_reactions, key=itemgetter(2))
-        protomer_reactions = [(x[0], x[1]) for x in protomer_reactions]
+        proto_reactions = sorted(proto_reactions, key=itemgetter(2))
+        proto_reactions = [(x[0], x[1]) for x in proto_reactions]
         # enumerate all transformations
         results, success = self._exhaustive_reaction(
-            protomer_reactions,
+            proto_reactions,
             keep_all,
             max_results,
             reaction_log=self.reaction_log,
@@ -381,7 +382,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
                     )
                 print("[VERBOSE]", results)
                 for mol in results:
-                    self._set_scrubber_property(mol, "Scrubber_protomer_count")
+                    self._set_scrubber_property(mol, "Scrubber_proto_count")
             if keep_all:
                 self.mol_pool += results
             else:
@@ -435,7 +436,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             # TODO check if this is even necessary, we modify objects in place...
             return pool1, pool2
 
-        reactions = [(x[0], x[1][0]) for x in self.__tautomer_model.items()]
+        reactions = [(x[0], x[1][0]) for x in self.__tauto_model.items()]
         results, success = self._exhaustive_reaction(
             reaction_list=reactions,
             keep_all=True,
@@ -462,7 +463,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             else:
                 print("WARNING: amide protection disabled.")
         for mol in results:
-            self._set_scrubber_property(mol, "Scrubber_tautomer_count")
+            self._set_scrubber_property(mol, "Scrubber_tauto_count")
         if len(results):
             self.mol_pool += results
         return success
@@ -514,9 +515,9 @@ if __name__ == "__main__":
     verbose = False
     suppress_rdkit_warnings = True
     isomer_enum = False
-    protomer_enum = False
-    tautomer_enum = False
-    protomer_keep_all = False
+    proto_enum = False
+    tauto_enum = False
+    proto_keep_all = False
     if "-v" in sys.argv:
         verbose = True
         suppress_rdkit_warnings = False
@@ -525,13 +526,13 @@ if __name__ == "__main__":
     elif "-I" in sys.argv:
         isomer_enum = "all"
     if "-p" in sys.argv:
-        protomer_enum = True
-        protomer_keep_all = False
+        proto_enum = True
+        proto_keep_all = False
     if "-P" in sys.argv:
-        protomer_enum = True
-        protomer_keep_all = True
+        proto_enum = True
+        proto_keep_all = True
     if "-t" in sys.argv:
-        tautomer_enum = True
+        tauto_enum = True
 
     # try:
     #     infile = sys.argv[1]
@@ -543,14 +544,14 @@ if __name__ == "__main__":
     except:
         ph_datafile = "data/test_model.txt"
     try:
-        tautomer_datafile = sys.argv[3]
+        tauto_datafile = sys.argv[3]
     except:
-        tautomer_datafile = "data/tautomers.txt"
+        tauto_datafile = "data/tautomers.txt"
 
     mt = MoleculeIsomers(
         verbose=verbose,
         ph_datafile=ph_datafile,
-        tautomer_datafile=tautomer_datafile,
+        tauto_datafile=tauto_datafile,
         suppress_rdkit_warnings=suppress_rdkit_warnings,
     )
     # parse molecule
@@ -562,18 +563,18 @@ if __name__ == "__main__":
             print("-----------------------------------------------")
             outcome = mt.process(
                 mol,
-                stereoisomer_enum=isomer_enum,
-                stereoisomer_max_results=50,
-                protomer_enum=protomer_enum,
-                protomer_pH=7.4,
-                protomer_max_results=50,
-                protomer_keep_all=protomer_keep_all,
-                protomer_max_net_charge=5,
-                tautomer_enum=tautomer_enum,
-                tautomer_max_results=500,
-                # tautomer_keep_all=True,
-                tautomer_protect_aromatic=True,
-                tautomer_protect_amide=True,
+                stereo_enum=isomer_enum,
+                stereo_max_results=50,
+                proto_enum=proto_enum,
+                proto_pH=7.4,
+                proto_max_results=50,
+                proto_keep_all=proto_keep_all,
+                proto_max_net_charge=5,
+                tauto_enum=tauto_enum,
+                tauto_max_results=500,
+                # tauto_keep_all=True,
+                tauto_protect_aromatic=True,
+                tauto_protect_amide=True,
                 ## GENERIC
                 add_hydrogens=True,
                 gen3d=False,

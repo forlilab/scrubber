@@ -32,11 +32,11 @@ class GeometryGenerator(ScrubberClass):
         force_trans_amide: bool = True,
         force_field: str = "uff",
         max_iterations: int = 200,
-        auto_iterations: int = 10,
+        auto_iter_cycles: int = 10,
         gen3d: bool = True,
         gen3d_max_attempts: int = 3,
         fix_ring_corners: bool = False,
-        preserve_mol_properties:bool=True,
+        preserve_mol_properties: bool = True,
         _stop_at_defaults: bool = False,
     ):
         """forcefield       :   (uff, MMFF94, MMFF94s)
@@ -51,7 +51,7 @@ class GeometryGenerator(ScrubberClass):
         self.force_trans_amide = force_trans_amide
         self.force_field = force_field
         self.max_iterations = max_iterations
-        self.auto_iterations = auto_iterations
+        self.auto_iter_cycles = auto_iter_cycles
         self.gen3d = gen3d
         self.gen3d_max_attempts = gen3d_max_attempts
         self.fix_ring_corners = fix_ring_corners
@@ -79,7 +79,7 @@ class GeometryGenerator(ScrubberClass):
             self.gen3d_engine = rdDistGeom.ETKDGv3()
         else:
             self.gen3d_engine = None
-        self.auto_iterations = max(1, self.auto_iterations)
+        self.auto_iter_cycles = max(1, self.auto_iter_cycles)
         self.opt_add_h = self.add_h
         self.opt_force_trans_amide = self.force_trans_amide
         # TODO add support for flexible ring corners
@@ -103,13 +103,13 @@ class GeometryGenerator(ScrubberClass):
             "cycles": 0,
             "mol": mol,
             "iterations": self.ff_parms["maxIters"],
-            "accepted" : 1  # 1: full, 0: partial, -1: rejected
+            "accepted": 1,  # 1: full, 0: partial, -1: rejected
         }
         # run the cycle once (better than try/except?)
         while True:
             if self._handbrake:
                 report["state"] = "interrupted (handbrake)"
-                report['accepted'] = -1
+                report["accepted"] = -1
                 break
             # generate 3D coordinates if requested
             if not self.gen3d_engine is None:
@@ -120,17 +120,17 @@ class GeometryGenerator(ScrubberClass):
                     )  # , maxAttempts=self.gen3d_max_attempts)
                     # TODO check why disabled?
                 except Exception as err:
-                    report['state'] = err.__str__()
-                    report['accepted'] = -1
+                    report["state"] = err.__str__()
+                    report["accepted"] = -1
                     # return report
                     break
                 if mol.GetNumConformers() == 0:
                     report["state"] = "fail_3d"
-                    report['accepted'] = -1
+                    report["accepted"] = -1
                     break
             if self.opt_force_trans_amide:
                 self._fix_amide(mol)
-            for steps in range(self.auto_iterations):
+            for steps in range(self.auto_iter_cycles):
                 report["cycles"] += 1
                 # try:
                 if True:
@@ -144,19 +144,19 @@ class GeometryGenerator(ScrubberClass):
                 #     break
                 if out == -1:
                     report["state"] = "ff_fail"
-                    report['accepted'] = -1
+                    report["accepted"] = -1
                     break
                 elif out == 0:
                     report["state"] = "mini_converged"
-                    report['accepted'] = 1
+                    report["accepted"] = 1
                     break
                 elif out == 1:
                     report["state"] = "mini_not_converged"
-                    report['accepted'] = 0
+                    report["accepted"] = 0
             # return report
             break
         # print("RETURN", report, report['mol'].GetPropsAsDict())
-        report['mol'] = PropertyMol(report['mol'])
+        report["mol"] = PropertyMol(report["mol"])
         return report
 
     def _fix_amide(self, mol):
@@ -174,6 +174,7 @@ class GeometryGenerator(ScrubberClass):
                 rdMolTransforms.SetDihedralDeg(conf, a[0], a[1], a[3], a[4], 180)
                 # print("\n\n\n FIXED AMIDE FIXED! \n\tTEST IT AND SEE IF IT WORKED!")
 
+geom_default = GeometryGenerator.get_defaults()
 
 class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
     """MP worker version of the GeometryGenerator based on multiprocessing queues
@@ -183,7 +184,23 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
 
     """
 
-    def __init__(self, queue_in, queue_out, nice_level: int = None, strict:bool=False, **args):
+    def __init__(
+        self,
+        queue_in: multiprocessing.Queue,
+        queue_out: multiprocessing.Queue,
+        nice_level: int = None,
+        strict: bool = False,
+        # geom_opts: dict = GeometryGenerator.get_defaults(),
+        add_h: bool = geom_default["add_h"],
+        force_trans_amide: bool = geom_default["force_trans_amide"],
+        force_field: str = geom_default["force_field"],
+        max_iterations: int = geom_default["max_iterations"],
+        auto_iter_cycles: int = geom_default["auto_iter_cycles"],
+        gen3d: bool = geom_default["gen3d"],
+        gen3d_max_attempts: int = geom_default["gen3d_max_attempts"],
+        fix_ring_corners: bool = geom_default["fix_ring_corners"],
+        preserve_mol_properties: bool = geom_default["preserve_mol_properties"],
+    ):
         """initialize"""
         multiprocessing.Process.__init__(self)
         # set nice level if requested
@@ -192,7 +209,18 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
             # print("NICENESS!!!")
             os.nice(nice_level)
         # initialize the parent class
-        GeometryGenerator.__init__(self, **args)
+        GeometryGenerator.__init__(
+            self,
+            add_h,
+            force_trans_amide,
+            force_field,
+            max_iterations,
+            auto_iter_cycles,
+            gen3d,
+            gen3d_max_attempts,
+            fix_ring_corners,
+            preserve_mol_properties,
+        )
         self.queue_in = queue_in
         self.queue_out = queue_out
         self.strict = strict
@@ -213,13 +241,12 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
                 break
             # print("MOL", mol.GetPropsAsDict())
             report = self.process(mol)
-            if report['accepted'] >= self._success_cutoff:
-            # report["name"] = mol_name
+            if report["accepted"] >= self._success_cutoff:
+                # report["name"] = mol_name
                 self.queue_out.put(report)
             # except:
             #     print("PROBLEMATIC MOLECULE captured...")
             #     continue
-
 
         return
 
@@ -237,40 +264,68 @@ class ParallelGeometryGenerator(object):
                       only converged molecules are accepted, otherwise any minimized
                       molecule is accepted
     """
+
+
     def __init__(
         self,
         queue_in: multiprocessing.Queue = None,
         queue_out: multiprocessing.Queue = None,
-        geom_opts: dict = GeometryGenerator.get_defaults(),
+        # geom_opts: dict = GeometryGenerator.get_defaults(),
+        add_h: bool = geom_default["add_h"],
+        force_trans_amide: bool = geom_default["force_trans_amide"],
+        force_field: str = geom_default["force_field"],
+        max_iterations: int = geom_default["max_iterations"],
+        auto_iter_cycles: int = geom_default["auto_iter_cycles"],
+        gen3d: bool = geom_default["gen3d"],
+        gen3d_max_attempts: int = geom_default["gen3d_max_attempts"],
+        fix_ring_corners: bool = geom_default["fix_ring_corners"],
+        preserve_mol_properties: bool = geom_default["preserve_mol_properties"],
         max_proc: int = None,
         nice_level: int = None,
-        strict:bool = False,
+        strict: bool = False,
         _stop_at_defaults=False,
     ):
         self.queue_in = queue_in
         self.queue_out = queue_out
-        self.geom_opts = geom_opts
+        self.add_h = add_h
+        self.force_trans_amide = force_trans_amide
+        self.force_field = force_field
+        self.max_iterations = max_iterations
+        self.auto_iter_cycles = auto_iter_cycles
+        self.gen3d = gen3d
+        self.gen3d_max_attempts = gen3d_max_attempts
+        self.fix_ring_corners = fix_ring_corners
+        self.preserve_mol_properties = preserve_mol_properties
         self.max_proc = max_proc
         self.nice_level = nice_level
         self.strict = strict
         if _stop_at_defaults:
             return
-        print("=============================")
-        print("self.queue_in", self.queue_in)
-        print("self.queue_out", self.queue_out)
-        print("self.geom_opts", self.geom_opts)
-        print("self.max_proc ", self.max_proc)
-        print("self.nice_level", self.nice_level)
-        print("self.strict", self.strict)
-        print("=============================")
+        # print("=============================")
+        # print("self.queue_in", self.queue_in)
+        # print("self.queue_out", self.queue_out)
+        # print("self.geom_opts", self.geom_opts)
+        # print("self.max_proc ", self.max_proc)
+        # print("self.nice_level", self.nice_level)
+        # print("self.strict", self.strict)
+        # print("=============================")
         self.__workers = []
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
+            print(
+                "> parallel geometry initialized with independent multiprocessors: %d"
+                % self.max_proc
+            )
         if self.queue_in is None:
             self.queue_in = multiprocessing.JoinableQueue(maxsize=self.max_proc)
+            print("> parallel geometry initialized with independent queue in")
         if self.queue_out is None:
             self._queue_size = self.max_proc * 4
             self.queue_out = multiprocessing.Queue(maxsize=self.max_proc * 4)
+            print(
+                "> parallel geometry initialized with independent queue out with size:%d"
+                % self._queue_size
+            )
         else:
             self._queue_size = self.max_proc
         for i in range(self.max_proc):
@@ -279,7 +334,15 @@ class ParallelGeometryGenerator(object):
                 self.queue_out,
                 self.nice_level,
                 self.strict,
-                **geom_opts,
+                self.add_h,
+                self.force_trans_amide,
+                self.force_field,
+                self.max_iterations,
+                self.auto_iter_cycles,
+                self.gen3d,
+                self.gen3d_max_attempts,
+                self.fix_ring_corners,
+                self.preserve_mol_properties,
             )
             self.__workers.append(w)
             w.start()
@@ -302,4 +365,3 @@ class ParallelGeometryGenerator(object):
             w.terminate()
         for i in range(self._queue_size):
             self.queue_out.put(None)
-

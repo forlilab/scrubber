@@ -319,6 +319,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 if not self.writer is None:
                     self.writer.close()
                 print("writer done (Ctrl-C)")
+                self.comm_pipe.send(self._counter)
                 return
             if package is None:
                 # poison pill

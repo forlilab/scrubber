@@ -82,7 +82,7 @@ class ScrubberCore(object):
         "geometry": {
             "active": True,
             "values": ParallelGeometryGenerator.get_defaults(),
-            "ignore": ["queue_in", "queue_out", "nice_level"],
+            "ignore": ["queue_in", "queue_out", "nice_level", "max_proc"],
             # "values": GeometryGenerator.get_default_options(),
         },
         "general": {
@@ -109,7 +109,7 @@ class ScrubberCore(object):
     def __init__(self, options: dict = None):
         """this is where the classes doing all operations will do"""
         self.options = options
-        # self._parse_init(self.options)
+        self._parse_init(self.options)
         ###########################
         # initialize molecular provider and molecular storage
         #
@@ -176,7 +176,6 @@ class ScrubberCore(object):
         # isomeric transformations
         #
         if self.options["isomers"]["active"]:
-            print("XXX", self.options["isomers"]["values"])
             self.isomer = MoleculeIsomers(**self.options["isomers"]["values"])
         else:
             self.isomer = None
@@ -191,12 +190,12 @@ class ScrubberCore(object):
         # isomers
         self.options["isomers"]["active"] = any(
             self.options["isomers"]["values"][x]
-            for x in ["stereoisomer_enum", "protomer_enum", "tautomer_enum"]
+            for x in ["stereo_enum", "proto_enum", "tauto_enum"]
         )
         # geometry operations
+        print("OOO", self.options["geometry"])
         self.options["geometry"]["active"] = any(
-            self.options["geometry"]["general"][x]
-            for x in ["gen3d", "fix_ring_corners"]
+            self.options["geometry"]["values"][x] for x in ["gen3d", "fix_ring_corners"]
         )
 
     def process(self):
@@ -217,7 +216,7 @@ class ScrubberCore(object):
             for counter, mol_org in self.mol_provider:
                 if mol_org is None:
                     continue
-                print("Processing mol:", counter)
+                print("\rProcessing mol: % 10d" % counter, end="")
                 # print("MOL COUNTER (pre-PILL)", self.mol_writer._RANDOM)
                 # prefilter
                 if not self.filter_pre is None:
@@ -264,7 +263,7 @@ class ScrubberCore(object):
         #         print("\n\n**** WE'RE DONE ****\n\n")
         #     else:
         #         self._send_poison_pills()
-        print("[ saving all molecules... ]")
+        print("\r[ saving all molecules... ]                           ")
         if not self.mol_writer.is_alive():
             print("WRITER DEAD... trying to get the number...")
             if self._pipe_listener.poll():

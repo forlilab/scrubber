@@ -14,10 +14,10 @@ if __name__ == "__main__":
     from pprint import pprint as pp
 
     config = ScrubberCore.get_defaults()
-    print("CONFIG!")
+    # print("CONFIG!")
     with open("default_config.py", "w") as fp:
         pp(config, fp)
-    pp(config)
+    # pp(config)
 
     config["input"]["values"]["fname"] = sys.argv[1]
     # the protein
@@ -32,20 +32,19 @@ if __name__ == "__main__":
     config["isomers"]["active"] = True
     config["isomers"]["values"]["verbose"] = False
     config["isomers"]["values"]["ph_datafile"] = "..//scrubber/data/test_model.txt"
-    config["isomers"]["values"]["protomer_keep_all"] = False
-    config["isomers"]["values"]["protomer_enum"] = False
-    config["isomers"]["values"]["protomer_pH"] = 7.4  # single value
-    config["isomers"]["values"]["protomer_pH"] = [6.4, 8.4]  # pH range
+    config["isomers"]["values"]["proto_keep_all"] = False
+    config["isomers"]["values"]["proto_enum"] = False
+    config["isomers"]["values"]["proto_pH"] = 7.4  # single value
+    config["isomers"]["values"]["proto_pH"] = [6.4, 8.4]  # pH range
 
     # config["isomers"]["values"]['stereoisomer_enum'] = 'undefined' #  'all', False
-    config["isomers"]["values"][
-        "stereoisomer_enum"
-    ] = False  # 'undefined', 'all', 'False'
-    config["isomers"]["values"]["tautomer_enum"] = True
+    config["isomers"]["values"]["stereo_enum"] = False
+    # 'undefined', 'all', 'False'
+    config["isomers"]["values"]["tauto_enum"] = True
 
     # # test neutralizing already charged molecules
-    # config["isomers"]["values"]['protomer_enum'] = True
-    # config["isomers"]["values"]['protomer_neutralize'] = True
+    # config["isomers"]["values"]['proto_enum'] = True
+    # config["isomers"]["values"]['proto_neutralize'] = True
 
     # reject molecules that did not converge
     config["geometry"]["values"]["strict"] = True

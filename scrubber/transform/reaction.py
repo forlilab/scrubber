@@ -31,24 +31,24 @@ class Reactor(ScrubberClass, MoleculeTransformations):
         "mode": "all",
         "reaction_file": None,
         "verbose": False,
-        "suppress_rdkit_warnings": True,
+        # "suppress_rdkit_warnings": True,
     }
-    default_options = {"reactions_list": None, "keep_only_reacted": False}
+    # default_options = {"reactions_list": None, "keep_only_reacted": False}
     # PROTEC
     def __init__(
         self,
         mode: str = "all",
-        reaction_file: str = None,
-        reaction_list: str = None,
+        reactions_file: str = None,
         keep_only_reacted: bool = False,
         verbose: bool = False,
-        suppress_rdkit_warnings: bool = False,
+        # suppress_rdkit_warnings: bool = False,
         _stop_at_defaults: bool = False,
     ):
         self.mode = mode
-        self.reaction_file = reaction_file
+        self.reactions_file = reactions_file
+        self.keep_only_reacted = keep_only_reacted
         self.verbose = verbose
-        self.suppress_rdkit_warnings = suppress_rdkit_warnings
+        # self.suppress_rdkit_warnings = suppress_rdkit_warnings
         if _stop_at_defaults:
             return
         MoleculeTransformations().__init__(
@@ -56,7 +56,7 @@ class Reactor(ScrubberClass, MoleculeTransformations):
             self.verbose,
             self.suppress_rdkit_warnings,
         )
-        self.__init_reactions(self.reaction_file)
+        self.__init_reactions(self.reactions_file)
 
     def __init_reactions(self, reaction_file=None, only_custom=False):
         """initialize the default reactions for the reactor

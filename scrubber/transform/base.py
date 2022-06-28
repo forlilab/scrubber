@@ -157,105 +157,12 @@ class MolecularReactionsLogger(object):
         print("steps printed", idx + 1)
 
 
-# def exhaustive_reaction(
-#     reaction_list: list,
-#     keep_all: bool = True,
-#     max_results: int = 1000,
-#     max_iter: int = 10000,
-#     extra_reagent=None,
-#     reaction_log=None,
-# ) -> tuple:
-#     """perform the RDKit reaction. The format of the reaction is [(rxn_id,
-#     reaction)] This method processes the molecular pool (self.mol_pool) but
-#     does not add results to it, letting the calling method to take care of
-#     that (allowing for filtering etc.)
-#     https://github.com/tentrillion/rdkit-tutorials/blob/master/notebooks/003_SMARTS_ReactionsExamples.ipynb
-
-#     TODO this function should/could be used to attach covalent residues or warheads
-#     extra_reagent = covalent residue/warhead...
-
-#     """
-#     # counter for the max_iter counting
-#     _iter = 0
-#     results = UniqueMoleculeContainer()
-#     reaction_products = UniqueMoleculeContainer()
-#     consumed_reagents = UniqueMoleculeContainer()
-#     try:
-#         for rxn_idx, (rxn_pattern, rxn_obj) in enumerate(reaction_list):
-#             self._iterations += 1
-#             if not keep_all:
-#                 if len(reaction_products):
-#                     reagents_pool = reaction_products.copy()
-#                     reaction_products.clear()
-#                 else:
-#                     reagents_pool = self.mol_pool.copy()
-#                 reagents_pool -= consumed_reagents
-#             else:
-#                 reagents_pool = self.mol_pool.copy()
-#                 reagents_pool += reaction_products
-#                 reaction_products.clear()
-#                 reagents_pool += consumed_reagents
-#             if len(reagents_pool) > max_results:
-#                 raise MaxResultsException
-#             # loop this reaction until either no reagents are left, or no products are generated
-#             while True:
-#                 # reaction_products.sealed = True
-#                 for reagent in reagents_pool:
-#                     self._iterations += 1
-#                     _iter += 1
-#                     if _iter > max_iter:
-#                         raise MaxIterException
-#                     products = rxn_obj.RunReactants((reagent,))
-#                     if len(products):
-#                         consumed_reagents.add(reagent)
-#                         # this_reaction_products.add(reactant)
-#                     for p, *_ in products:
-#                         self._iterations += 1
-#                         # TODO add cache check here to check if discarded
-#                         # molecules are going to be processed here
-#                         try:
-#                             Chem.SanitizeMol(p)
-#                             # skip molecules that have been discarded already
-#                             if mol2smi(p) in self.__discarded:
-#                                 continue
-#                             reaction_products.add(p)
-#                             if reaction_log is None:
-#                                 continue
-#                             reaction_log.add(
-#                                 reagent, p, rxn_pattern, iteration=self._iterations
-#                             )
-#                         except AtomValenceException:
-#                             pass
-#                         except KekulizeException:
-#                             pass
-#                         except:
-#                             success = False
-#                 if len(reaction_products):
-#                     reagents_pool = UniqueMoleculeContainer(reaction_products)
-#                     reaction_products = UniqueMoleculeContainer()
-#                 else:
-#                     reaction_products = reagents_pool
-#                     break
-#     except MaxResultsException:
-#         success = False
-#         print("WARNING: maximum number of results reached (%d)" % max_results)
-#     except MaxIterException:
-#         success = False
-#         print("WARNING: maximum number of iterations reached (%d)" % _iter)
-#     if keep_all:
-#         reagents_pool += consumed_reagents
-#         reagents_pool += reaction_products
-#     return reagents_pool, success
-
-
 class MoleculeTransformations(object):
     """Generic class to handle transformations
 
     Children classes need to implement a process() method that uses
     internally the __exhaustive_reaction() method to perform the actual
     transformations.
-
-
     """
 
     def __init__(self, verbose: bool = False, suppress_rdkit_warnings: bool = True):
@@ -309,8 +216,8 @@ class MoleculeTransformations(object):
         # results = UniqueMoleculeContainer()
         reaction_products = UniqueMoleculeContainer()
         consumed_reagents = UniqueMoleculeContainer()
-        visited = UniqueMoleculeContainer()
-        visited_pairs = set()
+        visited = UniqueMoleculeContainer(ignore_chirality=True)
+        # visited_pairs = set()
         try:
             for rxn_idx, (rxn_pattern, rxn_obj) in enumerate(reaction_list):
                 self._iterations += 1
@@ -333,11 +240,14 @@ class MoleculeTransformations(object):
                 while True:
                     # reaction_products.sealed = True
                     for reagent in reagents_pool:
-                        visited.add(reagent)
-                        if not (reagent,rxn_pattern) in visited_pairs:
-                            visited_pairs.add((reagent,rxn_pattern))
-                        else:
-                            continue
+                        # if reagent in visited:
+                        #     continue
+                        # visited.add(reagent)
+
+                        # if not (reagent,rxn_pattern) in visited_pairs:
+                        #     visited_pairs.add((reagent,rxn_pattern))
+                        # else:
+                        #     continue
                         self._iterations += 1
                         _iter += 1
                         if _iter > max_iter:
@@ -360,7 +270,7 @@ class MoleculeTransformations(object):
                                 if p in visited:
                                     continue
                                 visited.add(p)
-                                visited_pairs.add((p, rxn_pattern))
+                                # visited_pairs.add((p, rxn_pattern))
                                 if preserve_mol_properties:
                                     copy_mol_properties(reagent, p, strict=False, include_name=True)
                                 reaction_products.add(PropertyMol(p))
