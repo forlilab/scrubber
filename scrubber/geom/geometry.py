@@ -7,10 +7,13 @@ from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.PropertyMol import PropertyMol
 
-from ..common import ScrubberClass, copy_mol_properties
+from ..common import ScrubberBase, copy_mol_properties
+
+# TODO
+# print add proper reporting for each molecule that gets put into the queue_err, so a Scrubber_error field can be added in the output molecule
 
 
-class GeometryGenerator(ScrubberClass):
+class GeometryGenerator(ScrubberBase):
     """Generate and optimize
 
     manage the generation of 3D coordinates of molecules and optimize them using force fields
@@ -111,48 +114,55 @@ class GeometryGenerator(ScrubberClass):
                 report["state"] = "interrupted (handbrake)"
                 report["accepted"] = -1
                 break
-            # generate 3D coordinates if requested
-            if not self.gen3d_engine is None:
-                report["gen3d_max_attempts"] = self.gen3d_max_attempts
-                try:
-                    rdDistGeom.EmbedMolecule(
-                        mol, self.gen3d_engine
-                    )  # , maxAttempts=self.gen3d_max_attempts)
-                    # TODO check why disabled?
-                except Exception as err:
-                    report["state"] = err.__str__()
-                    report["accepted"] = -1
-                    # return report
-                    break
-                if mol.GetNumConformers() == 0:
-                    report["state"] = "fail_3d"
-                    report["accepted"] = -1
-                    break
-            if self.opt_force_trans_amide:
-                self._fix_amide(mol)
-            for steps in range(self.auto_iter_cycles):
-                report["cycles"] += 1
-                # try:
-                if True:
-                    out = self.ff_optimize(mol, **self.ff_parms)
-                # TODO this part of the code should be uncommented only at the verey end...
-                # except Exception as err:
-                #     report['state'] = err.__str__()
-                #     report['accepted'] = -1
-                #     # print("CAPTURED EXOTIC ERROR!", report['state'])
-                #     # return report
-                #     break
-                if out == -1:
-                    report["state"] = "ff_fail"
-                    report["accepted"] = -1
-                    break
-                elif out == 0:
-                    report["state"] = "mini_converged"
-                    report["accepted"] = 1
-                    break
-                elif out == 1:
-                    report["state"] = "mini_not_converged"
-                    report["accepted"] = 0
+            try:
+                # generate 3D coordinates if requested
+                if not self.gen3d_engine is None:
+                    report["gen3d_max_attempts"] = self.gen3d_max_attempts
+                    try:
+                        rdDistGeom.EmbedMolecule(
+                            mol, self.gen3d_engine)
+                        # , maxAttempts=self.gen3d_max_attempts)
+                        # TODO this is raising an error in RDKit, figure out
+                        # TODO check if disabled in the code?
+                    except Exception as err:
+                        report["state"] = err.__str__()
+                        report["accepted"] = -1
+                        # return report
+                        break
+                    if mol.GetNumConformers() == 0:
+                        report["state"] = "fail_3d"
+                        report["accepted"] = -1
+                        break
+                if self.opt_force_trans_amide:
+                    self._fix_amide(mol)
+                for steps in range(self.auto_iter_cycles):
+                    report["cycles"] += 1
+                    # try:
+                    if True:
+                        out = self.ff_optimize(mol, **self.ff_parms)
+                    # TODO this part of the code should be uncommented only at the verey end...
+                    # except Exception as err:
+                    #     report['state'] = err.__str__()
+                    #     report['accepted'] = -1
+                    #     # print("CAPTURED EXOTIC ERROR!", report['state'])
+                    #     # return report
+                    #     break
+                    if out == -1:
+                        report["state"] = "ff_fail"
+                        report["accepted"] = -1
+                        break
+                    elif out == 0:
+                        report["state"] = "mini_converged"
+                        report["accepted"] = 1
+                        break
+                    elif out == 1:
+                        report["state"] = "mini_not_converged"
+                        report["accepted"] = 0
+            except RuntimeError as err:
+                report["state"] =  err.__str__()  #"ff_fail"
+                report["accepted"] = -1
+                break
+
             # return report
             break
         # print("RETURN", report, report['mol'].GetPropsAsDict())
@@ -188,6 +198,7 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
         self,
         queue_in: multiprocessing.Queue,
         queue_out: multiprocessing.Queue,
+        queue_err: multiprocessing.Queue=None,
         nice_level: int = None,
         strict: bool = False,
         # geom_opts: dict = GeometryGenerator.get_defaults(),
@@ -223,6 +234,7 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
         )
         self.queue_in = queue_in
         self.queue_out = queue_out
+        self.queue_err = queue_err
         self.strict = strict
         if self.strict:
             self._success_cutoff = 0
@@ -232,24 +244,31 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
     def run(self):
         """overload of multiprocessing run method"""
         while True:
-            if self._handbrake:
-                print("trying to exit gracefully...")
-            mol = self.queue_in.get()
-            if mol is None or self._handbrake:
-                # print("GEOM RECEIVED POISON PILL")
-                self.queue_out.put(None)
-                break
-            # print("MOL", mol.GetPropsAsDict())
-            report = self.process(mol)
-            if report["accepted"] >= self._success_cutoff:
-                # report["name"] = mol_name
-                self.queue_out.put(report)
-            # except:
-            #     print("PROBLEMATIC MOLECULE captured...")
-            #     continue
-
+            try:
+                if self._handbrake:
+                    print("trying to exit gracefully...")
+                mol = self.queue_in.get()
+                if mol is None or self._handbrake:
+                    # print("GEOM RECEIVED POISON PILL")
+                    self.queue_out.put(None)
+                    break
+                # print("MOL", mol.GetPropsAsDict())
+                report = self.process(mol)
+                if report["accepted"] >= self._success_cutoff:
+                    # report["name"] = mol_name
+                    self.queue_out.put(report)
+                else:
+                    if self.queue_err is None:
+                        continue
+                    print("REPORTING THIS MOLECULE:", report)
+                    self.queue_err.put( ("geom", report['mol']) )
+                # except:
+                #     print("PROBLEMATIC MOLECULE captured...")
+                #     continue
+            except KeyboardInterrupt:
+                print("[geom] Caught Ctrl-C...")
+                return
         return
-
 
 class ParallelGeometryGenerator(object):
     """Parallelized (multiprocessing) 3D geometry builder
@@ -270,6 +289,7 @@ class ParallelGeometryGenerator(object):
         self,
         queue_in: multiprocessing.Queue = None,
         queue_out: multiprocessing.Queue = None,
+        queue_err: multiprocessing.Queue = None,
         # geom_opts: dict = GeometryGenerator.get_defaults(),
         add_h: bool = geom_default["add_h"],
         force_trans_amide: bool = geom_default["force_trans_amide"],
@@ -287,6 +307,7 @@ class ParallelGeometryGenerator(object):
     ):
         self.queue_in = queue_in
         self.queue_out = queue_out
+        self.queue_err = queue_err
         self.add_h = add_h
         self.force_trans_amide = force_trans_amide
         self.force_field = force_field
@@ -330,28 +351,37 @@ class ParallelGeometryGenerator(object):
             self._queue_size = self.max_proc
         for i in range(self.max_proc):
             w = GeometryGeneratorMPWorker(
-                self.queue_in,
-                self.queue_out,
-                self.nice_level,
-                self.strict,
-                self.add_h,
-                self.force_trans_amide,
-                self.force_field,
-                self.max_iterations,
-                self.auto_iter_cycles,
-                self.gen3d,
-                self.gen3d_max_attempts,
-                self.fix_ring_corners,
-                self.preserve_mol_properties,
+                queue_in = self.queue_in,
+                queue_out = self.queue_out,
+                queue_err = self.queue_err,
+                nice_level = self.nice_level,
+                strict = self.strict,
+                add_h = self.add_h,
+                force_trans_amide = self.force_trans_amide,
+                force_field = self.force_field,
+                max_iterations = self.max_iterations,
+                auto_iter_cycles = self.auto_iter_cycles,
+                gen3d = self.gen3d,
+                gen3d_max_attempts = self.gen3d_max_attempts,
+                fix_ring_corners = self.fix_ring_corners,
+                preserve_mol_properties = self.preserve_mol_properties,
             )
             self.__workers.append(w)
             w.start()
-        print("%d workers initialized" % len(self.__workers))
+        print("[ %d geometry workers initialized ]" % len(self.__workers))
 
     @classmethod
     def get_defaults(cls):
         """method to return the default values of init options"""
         return cls(_stop_at_defaults=True).__dict__
+
+    def is_alive(self):
+        """function to implement a similar behavior of multiprocessing is_alive() method; return true if at least one of the workers initialized is still alive"""
+        for w in self.__workers:
+            if w.is_alive():
+                return True
+        return False
+
 
     def halt_workers(self):
         """function to stop all pending calculations"""

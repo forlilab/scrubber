@@ -217,7 +217,7 @@ class MoleculeTransformations(object):
         reaction_products = UniqueMoleculeContainer()
         consumed_reagents = UniqueMoleculeContainer()
         visited = UniqueMoleculeContainer(ignore_chirality=True)
-        # visited_pairs = set()
+        visited_pairs = set()
         try:
             for rxn_idx, (rxn_pattern, rxn_obj) in enumerate(reaction_list):
                 self._iterations += 1
@@ -240,14 +240,11 @@ class MoleculeTransformations(object):
                 while True:
                     # reaction_products.sealed = True
                     for reagent in reagents_pool:
-                        # if reagent in visited:
-                        #     continue
-                        # visited.add(reagent)
-
-                        # if not (reagent,rxn_pattern) in visited_pairs:
-                        #     visited_pairs.add((reagent,rxn_pattern))
-                        # else:
-                        #     continue
+                        ###### MULTIPLICITY REDUCTION 1 (TO TEST)
+                        if not (mol2smi(reagent, False),rxn_pattern) in visited_pairs:
+                            visited_pairs.add((mol2smi(reagent,False),rxn_pattern))
+                        else:
+                            continue
                         self._iterations += 1
                         _iter += 1
                         if _iter > max_iter:
@@ -257,7 +254,6 @@ class MoleculeTransformations(object):
                             print("ReactionId[%s]: %d products" %(rxn_idx, len(products)))
                         if len(products):
                             consumed_reagents.add(reagent)
-                            # this_reaction_products.add(reactant)
                         for p, *_ in products:
                             self._iterations += 1
                             # TODO add cache check here to check if discarded
@@ -265,12 +261,19 @@ class MoleculeTransformations(object):
                             try:
                                 Chem.SanitizeMol(p)
                                 # skip molecules that have been discarded already
-                                if mol2smi(p) in self._discarded:
-                                    continue
+                                # if mol2smi(p,False) in self._discarded:
+                                #     continue
+                                ###### MULTIPLICITY REDUCTION 2 (TO TEST)
                                 if p in visited:
                                     continue
                                 visited.add(p)
-                                # visited_pairs.add((p, rxn_pattern))
+                                ###### MULTIPLICITY REDUCTION 3 (TO TEST)
+                                if not (p,rxn_pattern) in visited_pairs:
+                                    visited_pairs.add((mol2smi(p,False),rxn_pattern))
+                                else:
+                                    continue
+                                visited_pairs.add((p, rxn_pattern))
+                                ##############################################
                                 if preserve_mol_properties:
                                     copy_mol_properties(reagent, p, strict=False, include_name=True)
                                 reaction_products.add(PropertyMol(p))

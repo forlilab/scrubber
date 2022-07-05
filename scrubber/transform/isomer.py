@@ -8,7 +8,7 @@ from rdkit.Chem.EnumerateStereoisomers import (
     GetStereoisomerCount,
 )
 
-from ..common import ScrubberClass, UniqueMoleculeContainer, mol2smi
+from ..common import ScrubberBase, UniqueMoleculeContainer, mol2smi
 # from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
 
 
@@ -27,7 +27,7 @@ PH_DATAFILE = "phmodel.txt"
 TAUTOMERS_DATAFILE = "tautomers.txt"
 
 
-class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
+class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
     """Class to apply chemical transformations:
     - stereoisomers (chirality enumeration)
     - tautomers
@@ -46,7 +46,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         proto_max_results: int = 50,
         proto_keep_all: bool = False,
         proto_max_net_charge: int = 5,
-        proto_neutralize:bool = False,
+        proto_neutralize_only:bool = False,
         ## TAUTOMERS
         tauto_enum: bool = True,
         tauto_max_results: int = 50000,
@@ -71,7 +71,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         self.proto_max_results = proto_max_results
         self.proto_keep_all = proto_keep_all
         self.proto_max_net_charge = proto_max_net_charge
-        self.proto_neutralize = proto_neutralize
+        self.proto_neutralize_only = proto_neutralize_only
         self.tauto_enum = tauto_enum
         self.tauto_max_results = tauto_max_results
         # self.tauto_keep_all = tauto_keep_all
@@ -104,10 +104,11 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
             ph_datafile=self.ph_datafile,
             tauto_datafile=self.tauto_datafile,
         )
-        if isinstance(self.proto_pH, int):
-            self.proto_pH = [self.proto_pH, self.proto_pH]
-        elif isinstance(self.proto_pH, list):
-            self.proto_pH = [self.proto_pH[0], self.proto_pH[1]]
+        # TODO disabled; figure out how to make it work across neutrality threshold...
+        # if isinstance(self.proto_pH, int):
+        #     self.proto_pH = [self.proto_pH, self.proto_pH]
+        # elif isinstance(self.proto_pH, list):
+        #     self.proto_pH = [self.proto_pH[0], self.proto_pH[1]]
 
 
     def __init_data(
@@ -173,6 +174,7 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
                     self.proto_max_results,
                     self.proto_keep_all,
                     self.proto_max_net_charge,
+                    self.proto_neutralize_only,
                 )
                 # store the status of the last operation
                 success_record.append((success, self._iterations, "protomer"))
@@ -341,12 +343,15 @@ class MoleculeIsomers(ScrubberClass, MoleculeTransformations):
         # find which transformations apply
         proto_reactions = []
         for pattern, (rxn, rxn_pH) in self.__ph_model.items():
-            if pH[0] == pH[1]:
-                if rxn_pH >= pH[1]:
-                    continue
-            else:
-                if pH[0] <= rxn_pH >= pH[1]:
-                    continue
+            if rxn_pH >= pH:
+                continue
+            # TODO fix after figuring out how to deal with neutrality threshold
+            # if pH[0] == pH[1]:
+            #     if rxn_pH >= pH[1]:
+            #         continue
+            # else:
+            #     if pH[0] <= rxn_pH >= pH[1]:
+            #         continue
             proto_reactions.append((pattern, rxn, rxn_pH))
         # sort transformations by decreasing pKa (TODO: maybe useful for the future)
         proto_reactions = sorted(proto_reactions, key=itemgetter(2))

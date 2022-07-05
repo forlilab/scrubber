@@ -3,7 +3,6 @@ from io import BytesIO
 import pickle
 import re
 
-# TODO use cPickle
 import threading
 import multiprocessing
 import queue
@@ -11,7 +10,7 @@ import os
 from rdkit import Chem, RDLogger
 from rdkit.Chem.PropertyMol import PropertyMol
 
-from .common import ScrubberClass
+from .common import ScrubberBase
 
 """ this file contains all the  molecule providers
     - files
@@ -24,8 +23,11 @@ should be implemented here
 """
 VALID_FORMATS = ["smi", "sdf"]
 
+# TODO use cPickle for pipes
+# TODO implement a non-strict parsing to use molvis-like fixing operations (i.e.: nitro-fixes?)
 
-class MoleculeProvider(ScrubberClass):
+
+class MoleculeProvider(ScrubberBase):
     """This is the class of Molecule Providers iterator, which behave all the same:
     - instanciated optionally with a file
     - can be iterated returning a molecule at each step
@@ -38,20 +40,23 @@ class MoleculeProvider(ScrubberClass):
     # TODO add multithreaded mol supplier
     #  - https://iwatobipen.wordpress.com/2021/05/04/read-sdf-with-multi-thread-rdkit-memo-chemoinformatics/
     # TODO add gz support (custom func for extension)
+    # TODO add desalting method/options
     default_mol_name = "MOL"
 
     def __init__(
         self,
         fname=None,
         ftype=None,
-        pipe: bool = False, # not yet supported...
+        use_pipe: bool = False,  # not yet supported...
         sanitize: bool = True,
         removeHs: bool = False,
         strictParsing: bool = True,
         # preserve_properties: bool = True,
-        name_property:str= None,
+        name_property: str = None,
         safeparsing: bool = True,
         discarded_datafile: str = None,
+        queue_err: multiprocessing.Queue = None,
+        pipe_comm: multiprocessing.Pipe = None,
         # use_PropertyMol: bool = True,
         start_count: int = 0,
         end_count: int = -1,
@@ -59,7 +64,7 @@ class MoleculeProvider(ScrubberClass):
     ):
         self.fname = fname
         self.ftype = ftype
-        self.pipe = pipe
+        self.use_pipe = use_pipe
         self.sanitize = sanitize
         self.removeHs = removeHs
         self.strictParsing = strictParsing
@@ -67,6 +72,8 @@ class MoleculeProvider(ScrubberClass):
         self.name_property = name_property
         self.safeparsing = safeparsing
         self.discarded_datafile = discarded_datafile
+        self.queue_err = queue_err
+        self.pipe_comm = pipe_comm
         # self.use_PropertyMol = use_PropertyMol
         self.start_count = start_count
         self.end_count = end_count
@@ -75,14 +82,14 @@ class MoleculeProvider(ScrubberClass):
         self._counter = 0
         self._counter_problematic = 0
         # self._build_opts_dict()
-        if not int(self.fname is not None) + (self.pipe) == 1:
+        if not int(self.fname is not None) + (self.use_pipe) == 1:
             msg = (
                 "Error: either filename or pipe mode must be "
-                "specified (current: fname:%s, pipe:%s)" % (self.fname, str(self.pipe))
+                "specified (current: fname:%s, pipe:%s)" % (self.fname, str(self.use_pipe))
             )
             raise ValueError(msg)
         # check extension and activate proper source
-        if pipe:
+        if self.use_pipe:
             self._source = PipeMolSupplier2()
         elif fname is not None:
             print("[ FILE MODE ]")
@@ -104,6 +111,7 @@ class MoleculeProvider(ScrubberClass):
                         removeHs=self.removeHs,
                         strictParsing=self.strictParsing,
                         discarded_datafile=self.discarded_datafile,
+                        queue_err=self.queue_err,
                     )
                 else:
                     self._source = Chem.SDMolSupplier(
@@ -115,7 +123,10 @@ class MoleculeProvider(ScrubberClass):
             elif self.ftype == "smi":
                 if self.safeparsing:
                     self._source = SMIMolSupplierWrapper(
-                        fname, sanitize=self.sanitize, titleLine=False
+                        fname,
+                        sanitize=self.sanitize,
+                        titleLine=False,
+                        queue_err=self.queue_err,
                     )
                 else:
                     self._source = Chem.SmilesMolSupplier(
@@ -137,10 +148,14 @@ class MoleculeProvider(ScrubberClass):
                 if self._counter < self.start_count:
                     # print("SKIPPING START")
                     continue
-                if (not self.end_count == -1) and (self._counter > self.end_count):
+                if (not self.end_count == -1) and (self._counter == self.end_count):
                     # print("SKIPPING END")
                     if self.safeparsing:
                         self._source._close_fp()
+                        if not self.pipe_comm is None:
+                            self.pipe_comm.send(
+                                "input:%d" % (self._counter - self.start_count)
+                            )
                     raise StopIteration
                 if not next_mol is None:
                     next_mol = PropertyMol(next_mol)
@@ -149,7 +164,9 @@ class MoleculeProvider(ScrubberClass):
                         if next_mol.HasProp(self.name_property):
                             # preserve original name
                             if next_mol.HasProp("_Name"):
-                                next_mol.SetProp("Original_name_from_input", mol.GetProp("_Name"))
+                                next_mol.SetProp(
+                                    "Original_name_from_input", mol.GetProp("_Name")
+                                )
                             # rename the molecule using the requested field
                             next_mol.SetProp("_Name", mol.GetProp(self.name_property))
                         # else:
@@ -165,10 +182,12 @@ class MoleculeProvider(ScrubberClass):
         except StopIteration:
             if self.safeparsing:
                 self._source._close_fp()
+            if not self.pipe_comm is None:
+                self.pipe_comm.send("input:%d" % (self._counter - self.start_count))
             raise StopIteration
 
 
-class MoleculeStorage(ScrubberClass, multiprocessing.Process):
+class MoleculeStorage(ScrubberBase, multiprocessing.Process):
     """Class to write molecules processed;
 
     destinations can be : file, stdout, dbaseo
@@ -200,9 +219,9 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
 
     def __init__(
         self,
-        mode: str = "single",  # "single", "split", "pipe"
         fname: str = None,
         ftype: str = None,  # smi, sdf, None (auto)
+        mode: str = "single",  # "single", "split", "pipe"
         format_opts: dict = out_format_opts_default,
         naming: str = "auto",  # auto, (progressive), name (molname)
         naming_field: str = "",
@@ -212,7 +231,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
         workers_count: int = 1,
         # disable_rdkit_warnings: bool = True,
         queue: multiprocessing.Queue = None,
-        comm_pipe: multiprocessing.Pipe=None,
+        comm_pipe: multiprocessing.Pipe = None,
         _stop_at_defaults=False,
     ):
         """
@@ -237,25 +256,20 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                     WRITER = disposable (OUTFILE)
 
         """
-        self.mode = mode
         self.fname = fname
         self.ftype = ftype
+        self.mode = mode
         self.format_opts = format_opts
         self.naming = naming
-        # self.naming_field = naming_field
         self.max_lig_per_dir = max_lig_per_dir
         self.disable_name_sanitize = disable_name_sanitize
         self.disable_preserve_properties = disable_preserve_properties
         self.workers_count = workers_count
-        # self.overwrite = overwrite
-        # self.disable_rdkit_warnings = disable_rdkit_warnings
         self.queue = queue
         self.comm_pipe = comm_pipe
         if _stop_at_defaults:
             return
         RDLogger.DisableLog("rdApp.*")
-        # if self.disable_rdkit_warnings:
-        #     RDLogger.DisableLog("rdApp.*")
         multiprocessing.Process.__init__(self)
         self._counter = 0
         self._dir_counter = 0
@@ -316,20 +330,22 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
             try:
                 package = self.queue.get()
             except KeyboardInterrupt:
+                print("writer done (Ctrl-C)")
                 if not self.writer is None:
                     self.writer.close()
-                print("writer done (Ctrl-C)")
-                self.comm_pipe.send(self._counter)
+                if not self.comm_pipe is None:
+                    self.comm_pipe.send("writer:%d" % self._counter)
                 return
             if package is None:
                 # poison pill
                 self.workers_count -= 1
                 if self.workers_count == 0:
-                    # TODO this might be superfluouus
+                    # TODO this might be superfluous
                     if not self.writer is None:
                         self.writer.close()
                     if not self.comm_pipe is None:
-                        self.comm_pipe.send(self._counter)
+                        # self.comm_pipe.send(self._counter)
+                        self.comm_pipe.send("writer:%d" % self._counter)
                     return
                 else:
                     continue
@@ -341,42 +357,27 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
             if self.mode == "single":
                 # save all non-private properties in the current molecule
                 if not self.disable_preserve_properties and self.ftype == "sdf":
-                    # this triggers a warning if done after the initialization
-                    # of the writer therefore it requires the suppression of
-                    # all the RDKit warnings
-                    # if not self.disable_rdkit_warnings:
-                        # RDLogger.DisableLog("rdApp.*")
                     self.writer.SetProps(mol.GetPropNames())
-                    # if not self.disable_rdkit_warnings:
-                    #     RDLogger.EnableLog("rdApp.*")
-                self._counter+=1
+                self._counter += 1
                 self.writer.write(mol)
             elif self.mode == "split":
                 outfname = self._get_outfname(mol)
                 writer = self.out_format_file_writers["single"][self.ftype]
-                # this triggers a warning if done after the initialization
-                # of the writer therefore it requires the suppression of
-                # all the RDKit warnings
-                # if not self.disable_rdkit_warnings:
-                #     RDLogger.DisableLog("rdApp.*")
-                # writer.SetProps(mol.GetPropNames())
-                # if not self.disable_rdkit_warnings:
-                #     RDLogger.EnableLog("rdApp.*")
-                self._counter+=1
+                self._counter += 1
                 with writer(outfname) as fp:
                     fp.write(mol)
-                # with open(outfname, "w") as fp:
-                #     fp.write(writer(mol, **self.out_format_opts[self.mode][self._ext]))
             elif self.mode == "pipe":
                 pickle.dump(mol, sys.stdout.buffer)
             # self._counter += 1
 
-    def _get_outfname(self, mol,):
+    def _get_outfname(
+        self,
+        mol,
+    ):
         """function to automate the output molecule name, and generate
         progressive subdirectories, if required"""
 
         # TODO check for Scrubber properties here, if they can be used for naming, e.g.: p1_t2_s4
-
         default_name = "MOL"
         dirname = [self._basedir]
         ext = self.ftype
@@ -397,7 +398,7 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
                 basename = "%s_%s" % (self._basename[0], self._counter)
             else:
                 basename = "%s_%s" % (default_name, self._counter)
-        if not self.disable_name_sanitize:
+        if not self.disable_name_sanitize or True:
             basename = self._sanitize_string(basename)
         # generate the directory name
         if self.max_lig_per_dir > 0:
@@ -431,24 +432,30 @@ class MoleculeStorage(ScrubberClass, multiprocessing.Process):
     def _sanitize_string(self, string):
         """function to apply rules to generate a valid filename from a
         molecular name"""
+        # TODO this is inaccurate... does not seem to work...
         # replace spaces and tabs with underscore
         # print("----------------")
-        # print("RECEIVED", string)
-        string = re.sub("\s+","_", string)
-        string = re.sub("\t+","_", string)
+        # print(">RECEIVED|%s|" % string)
+        string = re.sub("\s+", "_", string)
+        string = re.sub("\t+", "_", string)
         string = string.replace("{", "(")
         string = string.replace("[", "(")
         string = string.replace("]", ")")
         string = string.replace("}", ")")
+        string = string.replace("/", "=")
         # print("PRODUCED", string)
         # print("----------------")
+        # trunkate filenames that are too long
+        if len(string) > 100:
+            string = string[:100]
+        # print(">RETURNNIG|%s|" % string)
         return string
 
 
 class SDFMolSupplierWrapper(object):
     """RDKit SDF molecule wapper to provide molecules in a robust way.
-    If an error is encountered when parsing the molecule, the raw text is dumped in a log file
-
+    If an error is encountered when parsing the molecule, the raw text is
+    dumped in a log file and/or passed in the error queue,
     """
 
     def __init__(
@@ -458,6 +465,7 @@ class SDFMolSupplierWrapper(object):
         removeHs: bool = False,
         strictParsing: bool = True,
         discarded_datafile: str = None,
+        queue_err: multiprocessing.Queue = None,
         _stop_at_defaults: bool = False,
     ):
         self.filename = filename
@@ -465,6 +473,7 @@ class SDFMolSupplierWrapper(object):
         self.removeHs = removeHs
         self.strictParsing = strictParsing
         self.discarded_datafile = discarded_datafile
+        self.queue_err = queue_err
         if _stop_at_defaults:
             return
         self.fp_input = open(filename, "r")
@@ -500,12 +509,13 @@ class SDFMolSupplierWrapper(object):
                         break  # go to last try/except
                     except:
                         self._counter_problematic += 1
-                        if self.discarded_datafile is None:
-                            continue
-                        if self.fp_errors is None:
-                            self.fp_errors = open(self.discarded_datafile, "w")
-                        buff = "\n".join(self._buff)
-                        self.fp_errors.write(buff + "\n")
+                        if not self.discarded_datafile is None:
+                            if self.fp_errors is None:
+                                self.fp_errors = open(self.discarded_datafile, "w")
+                            buff = "\n".join(self._buff)
+                            self.fp_errors.write(buff + "\n")
+                        if not self.queue_err is None:
+                            self.queue_err.put(("input", buff))
                         return None
                 else:
                     # buffer empty, stopping the iteration
@@ -544,12 +554,14 @@ class SMIMolSupplierWrapper(object):
         filename: str,
         sanitize: bool = True,
         titleLine: bool = False,
+        queue_err: multiprocessing.Queue = None,
         discarded_input_fname: str = None,
         _stop_at_defaults: bool = False,
     ):
         self.filename = filename
         self.sanitize = sanitize
         self.titleLine = titleLine
+        self.queue_err = queue_err
         self.discarded_input_fname = discarded_input_fname
         if _stop_at_defaults:
             return
@@ -557,7 +569,8 @@ class SMIMolSupplierWrapper(object):
         self.fp_errors = None
         self._buff = []
         self._first_line = False
-        print("INITIALIZED", self.titleLine)
+        # print("INITIALIZED", self.titleLine)
+        # print("INITIALIZED", self.queue_err)
 
     def _close_fp(self):
         """close all potential file pointers"""
@@ -583,13 +596,126 @@ class SMIMolSupplierWrapper(object):
                 raise StopIteration
             try:
                 mol = Chem.MolFromSmiles(line, sanitize=self.sanitize)
+                if mol is None:
+                    if not self.queue_err is None:
+                        self.queue_err.put(("input", line))
+                    if not self.discarded_input_fname is None:
+                        if self.fp_errors is None:
+                            self.fp_errors = open(self.discarded_input_fname)
+                        self.fp_errors.write(line + "\n")
                 return mol
             except:
-                if self.discarded_input_fname is None:
-                    continue
-                if self.fp_errors is None:
-                    self.fp_errors = open(self.discarded_input_fname)
-                self.fp_errors.write(line + "\n")
+                if not self.queue_err is None:
+                    self.queue_err.put(("input", line))
+                if not self.discarded_input_fname is None:
+                    if self.fp_errors is None:
+                        self.fp_errors = open(self.discarded_input_fname)
+                    self.fp_errors.write(line + "\n")
+                return None
+
+
+class MoleculeIssueStorage(ScrubberBase, multiprocessing.Process):
+    """Multiprocessing class to save problematic data encountered during the processing.
+    Problematic data encountered when parsing the input will be written with a
+    "raw", writer that will dump the text the wrapped parsers (i.e., non-RDKit
+    parsers) tried to process.
+
+    Problematic encountered during the molecule processing will be attempted to
+    be saved with RDKit writers
+
+    To prevent the creation of empty files in case of successful processing of
+    all data, output files will be written only if at least one molecule will
+    be passed to each of the writers
+    """
+
+    source_to_writer = {"geom": "format", "input": "raw"}
+
+    def __init__(
+        self,
+        log_from_input: str = None,
+        log_from_process: str = None,
+        queue: multiprocessing.Queue = None,
+        comm_pipe: multiprocessing.Pipe = None,
+        _stop_at_defaults: bool = False,
+    ):
+        self.log_from_input = log_from_input
+        self.log_from_process = log_from_process
+        self.queue = queue
+        self.comm_pipe = comm_pipe
+        if _stop_at_defaults:
+            return
+        multiprocessing.Process.__init__(self)
+        self._counter = 0
+        self._input_err_fp = None
+        self._process_err_fp_smi = None
+        self._process_err_fp_sdf = None
+        # early checks: all errors need to be raised as early as possible to
+        # prevent spending time on long calculations and failing when
+        # encountering errors
+        #
+        if (self.input_err_fname is None) and (self.process_err_fname is None):
+            msg = "Either input_errof_fname or process_err_fname must be specified"
+            raise ValueError(msg)
+        # check that none of the output files exists
+        fname_base, _ = os.path.splitext(self.process_err_fname)
+        self._process_err_fname_smi = "%s.smi" % fname_base
+        self._process_err_fname_sdf = "%s.sdf" % fname_base
+        for fname in self._process_err_fname_smi, self._process_err_fname_smi:
+            if os.path.exists(fname):
+                msg = "Filename [%s] already exists." % fname
+                raise FileExistsError(msg)
+
+    def _close_fp(self):
+        """close all open file pointers"""
+        if self._process_err_fp_smi is not None:
+            self._process_err_fp_smi.close()
+        if self._process_err_fp_sdf is not None:
+            self._process_err_fp_sdf.close()
+        if self._input_err_fp is not None:
+            self._input_err_fp.close()
+
+    def run(self):
+        """start waiting for input in the queue"""
+        try:
+            while True:
+                package = self.queue.get()
+                if package == None:
+                    self._close_fp()
+                    break
+                self._write_package(package)
+        except KeyboardInterrupt:
+            self._close_fp()
+
+    def _write_package(self, package):
+        """Write the problematic molecule according to the data type. Raw input
+        data tha couldn't be parsed properly will be written using a raw writer
+        that will dump the problematic buffer in the output file. Molecules
+        that failed at any other processing step will be written depending on
+        their dimensionality: 1D molecules in SMILES files, >1D in SDF files
+        """
+        source, mol = package
+        self._counter += 1
+        if isinstance(mol, Chem.rdchem.Mol):
+            if self._process_err_fp_sdf is None:
+                self._process_err_fp_sdf = Chem.SDWriter(self._process_err_fname_sdf)
+            self._process_err_fp_sdf.write(mol)
+            if not self.comm_pipe is None:
+                self.comm_pipe.send("err_process:%d" % self._counter)
+        elif isinstance(mol, str):
+            if self._input_err_fp is None:
+                self._input_err_fp = open(self.input_err_fname, "w")
+            self._input_err_fp.write(mol)
+            self._input_err_fp.flush()
+            if not self.comm_pipe is None:
+                self.comm_pipe.send("err_input:%d" % self._counter)
+        else:
+            print("THIS SHOULDN'T HAPPEN")
+            print(q)
+
+
+# TODO: implement a SQLite tmp-file to store all molecules seen so far?
+# - remove duplicates
+# - prevent file names collisions and overwriting
 
 
 class PipeMolSupplier(threading.Thread):
@@ -644,11 +770,6 @@ class PipeMolSupplier(threading.Thread):
             return self.buffer.get()
 
 
-# TODO: implement a SQLite tmp-file to store all molecules seen so far?
-# - remove duplicates
-# - prevent file names collisions and overwriting
-
-
 class PipeMolSupplier2:
     """ """
 
@@ -700,22 +821,6 @@ class PipeMolSupplier2:
                 print(q)
                 # print(">>PRINT", unread_bytes.decode())
                 return unread_bytes.decode()
-
-
-# class SimpleSmilesReader(object):
-#     """simple SMILES file iterator"""
-#     def __init__(self, fname, sanitize=True):
-#         self._fp = open(fname, 'w')
-#         return
-
-#     def __iter__(self):
-#         return self
-
-#     def __next__(self):
-#         try:
-#         # line = self._fp.readline()
-#         # if not line == "":
-#             smiles, *name , *_ = line.split(None, 3)
 
 
 if __name__ == "__main__":

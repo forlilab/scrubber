@@ -1,16 +1,15 @@
 import multiprocessing
 from time import sleep
+import sys
 
 from rdkit.Chem.PropertyMol import PropertyMol
 
-# storage import . import storage
 from .storage import (
     MoleculeProvider,
     MoleculeStorage,
-    SDFMolSupplierWrapper,
-    SMIMolSupplierWrapper,
+    MoleculeIssueStorage,
 )
-from .geom.geometry import ParallelGeometryGenerator  # , GeometryGenerator
+from .geom.geometry import ParallelGeometryGenerator
 from .filters import MoleculeFilter
 from .transform.isomer import MoleculeIsomers
 from .transform.reaction import Reactor
@@ -23,6 +22,8 @@ This file contains the core scrubber object
 # TODO add a dump for json format
     - dump all defaults
     - dump active only (stuff that's been modified)
+
+INSPIRATION: https://xkcd.com/1343/
 
 """
 
@@ -52,7 +53,7 @@ class ScrubberCore(object):
     __default_options = {
         "input": {
             "values": MoleculeProvider.get_defaults(),
-            "ignore": ["pipe"],
+            "ignore": ["use_pipe", "queue_err", "pipe_comm"],
         },
         "output": {
             "values": MoleculeStorage.get_defaults(),
@@ -71,7 +72,6 @@ class ScrubberCore(object):
         "reaction": {
             "active": False,
             "values": Reactor.get_defaults(),
-            "desc": "Options for chemical modifications to be performed on the input",
             "ignore": [],
         },
         "isomers": {
@@ -82,8 +82,7 @@ class ScrubberCore(object):
         "geometry": {
             "active": True,
             "values": ParallelGeometryGenerator.get_defaults(),
-            "ignore": ["queue_in", "queue_out", "nice_level", "max_proc"],
-            # "values": GeometryGenerator.get_default_options(),
+            "ignore": ["queue_in", "queue_out", "queue_err", "nice_level", "max_proc"],
         },
         "general": {
             "values": {
@@ -93,12 +92,9 @@ class ScrubberCore(object):
             "ignore": [],
         },
         # TODO STUFF BELOW HERERE
-        "log": {
-            "values": {
-                "problematic_logfile": None,
-                "other": None,
-            },
-            "ignore": [],
+        "errors": {
+            "values": MoleculeIssueStorage.get_defaults(),
+            "ignore": ["queue", "disable_name_sanitize", "comm_pipe"],
         },
         # -- CALC PROPERTIES
         # calc_properties : {}
@@ -110,43 +106,58 @@ class ScrubberCore(object):
         """this is where the classes doing all operations will do"""
         self.options = options
         self._parse_init(self.options)
+        self._registered_workers = []
+        # initialize pipes for multiprocessing communication
+        self._pipe_listener, self._pipe_remote = multiprocessing.Pipe(False)
+        ###########################
+        # initialize error logging, if requested
+        #
+        if (self.options["errors"]["values"]["log_from_input"] is not None) or (
+            self.options["errors"]["values"]["log_from_process"] is not None
+        ):
+            self.queue_err = multiprocessing.Queue(maxsize=-1)
+            self.options["errors"]["values"]["queue"] = self.queue_err
+            self.options["errors"]["values"]["comm_pipe"] = self._pipe_remote
+            self.mol_issues = MoleculeIssueStorage(**self.options["errors"]["values"])
+            self.mol_issues.start()
+            self._registered_workers.append(self.mol_issues)
+        else:
+            self.queue_err = None
+            self.mol_issues = None
         ###########################
         # initialize molecular provider and molecular storage
         #
-        # print("MOL PROV INIT", self.options["input"]["values"])
+        self.options["input"]["values"]["queue_err"] = self.queue_err
+        self.options["input"]["values"]["pipe_comm"] = self._pipe_remote
         self.mol_provider = MoleculeProvider(**self.options["input"]["values"])
-
         # queue out is where processed molecules are sent
         # if more than one processor is used, then use 4 as many for writing (low load)
         self.max_proc = self.options["general"]["values"]["max_proc"]
         nice = self.options["general"]["values"]["nice_level"]
-        # if self.max_proc > 1:
-        #     self.max_proc *= 4
-        self._pipe_listener, self._pipe_remote = multiprocessing.Pipe(False)
         self.queue_out = multiprocessing.Queue(maxsize=-1)  # self.max_proc)
         self.options["output"]["values"]["queue"] = self.queue_out
+        # self.options["output"]["values"]["queue_err"] = self.queue_err
         self.options["output"]["values"]["workers_count"] = self.max_proc
         self.options["output"]["values"]["comm_pipe"] = self._pipe_remote
         self.mol_writer = MoleculeStorage(**self.options["output"]["values"])
-        # self.mol_writer._counter+=1000
         self.mol_writer.start()
-        # self.mol_writer.join()
-
+        self._registered_workers.append(self.mol_writer)
         ###########################
         # geometry
         #
         if self.options["geometry"]["active"]:
             # queue in is the source of molecules to process
-            # nice = self.options["general"]["nice_level"]
             self.queue_in = multiprocessing.JoinableQueue(self.max_proc)
             self._target_queue = self.queue_in
             self.options["geometry"]["values"]["queue_in"] = self.queue_in
             self.options["geometry"]["values"]["queue_out"] = self.queue_out
+            self.options["geometry"]["values"]["queue_err"] = self.queue_err
             self.options["geometry"]["values"]["nice_level"] = nice
             self.options["geometry"]["values"]["max_proc"] = self.max_proc
             self.geometry_optimize = ParallelGeometryGenerator(
                 **self.options["geometry"]["values"]
             )
+            self._registered_workers.append(self.geometry_optimize)
             # TODO move the multiproc queues here?
         else:
             self.geometry_optimize = None
@@ -180,9 +191,22 @@ class ScrubberCore(object):
         else:
             self.isomer = None
 
+
+    def _check_still_alive(self):
+        """check that all pending workers have terminated their job"""
+        for worker in self._registered_workers:
+            if worker.is_alive():
+                return True
+        return False
+
     @classmethod
-    def get_defaults(cls):
-        return cls.__default_options.copy()
+    def get_defaults(cls, terse=False):
+        """return the defaults of the Scrubber Core, except for the 'ignore' group"""
+        defaults = cls.__default_options.copy()
+        if terse:
+            for group, opt in defaults.items():
+                defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
+        return defaults
 
     def _parse_init(self, options: dict) -> None:
         """extend the parent parse_init to add a check for the isomers and flag
@@ -193,7 +217,6 @@ class ScrubberCore(object):
             for x in ["stereo_enum", "proto_enum", "tauto_enum"]
         )
         # geometry operations
-        print("OOO", self.options["geometry"])
         self.options["geometry"]["active"] = any(
             self.options["geometry"]["values"][x] for x in ["gen3d", "fix_ring_corners"]
         )
@@ -204,7 +227,6 @@ class ScrubberCore(object):
 
             - pre-processing queue to parallelize: filtering, reactions,
               isomers? ( 1 core )
-            - post-processing queue: 3D geometry, rings? ( max_cpu-1 cores )
             - out queue: writer?
 
         TODO: explore the possibility of writing a file with all the generated
@@ -212,9 +234,11 @@ class ScrubberCore(object):
         """
         # this is required here to prevent exceptions in case of early failures
         counter = 0
+        skipped = 0
         try:
             for counter, mol_org in self.mol_provider:
                 if mol_org is None:
+                    skipped += 1
                     continue
                 print("\rProcessing mol: % 10d" % counter, end="")
                 # print("MOL COUNTER (pre-PILL)", self.mol_writer._RANDOM)
@@ -255,7 +279,6 @@ class ScrubberCore(object):
         #         print("\n\n**** WE'RE DONE ****\n\n")
         #     else:
         #         self._send_poison_pills()
-
         # except ValueError:
         #     if not self.geometry_optimize is None:
         #         # self.geometry_optimize.halt_workers()
@@ -263,27 +286,60 @@ class ScrubberCore(object):
         #         print("\n\n**** WE'RE DONE ****\n\n")
         #     else:
         #         self._send_poison_pills()
+
         print("\r[ saving all molecules... ]                           ")
-        if not self.mol_writer.is_alive():
-            print("WRITER DEAD... trying to get the number...")
-            if self._pipe_listener.poll():
-                written_count = self._pipe_listener.recv()
-        else:
-            while self.mol_writer.is_alive():
-                sleep(0.1)
-                if self._pipe_listener.poll():
-                    written_count = self._pipe_listener.recv()
-        print("FINAL: %d input molecules processed" % counter)
-        print(" total molecules written:: %d" % written_count)
-        # x = self._target_queue.get()
-        # print("XXX", x)
-        # self._target_queue.
+        counter_data = {
+            "input": -1,
+            "err_input": -1,
+            "err_process": -1,
+            "writer": -1,
+        }
+        print("\r[ waiting for the writers", end="")
+        # while (self.mol_writer.is_alive()) or (self.mol_issues.is_alive()):
+        while self._check_still_alive():
+            print(".", end="")
+            sys.stdout.flush()
+            sleep(0.5)
+        print(" ]")
+        while self._pipe_listener.poll():
+            packet = self._pipe_listener.recv()
+            label, value = packet.split(":")
+            counter_data[label] = int(value)
+        self._pipe_listener.close()
+        for k, v in counter_data.items():
+            if v is None:
+                counter_data[k] = "n/a"
+            # else:
+            #     counter_data[k] = '%d' % v
+        try:
+            pc = counter_data["writer"] / (counter_data["input"] - skipped)
+            if pc > 1.0:
+                net_result = "+%2.2f%%" % ((pc - 1.0) * 100)
+            else:
+                net_result = "-%2.2f%%" % ((1.0 - pc) * 100)
+        except ZeroDivisionError:
+            net_result = "n/a"
+
+        print("\n==============================================")
+        print("Summary")
+        print("----------------------------------------------")
+        print(" Input parsed   : %s " % (counter_data["input"]))
+        print(" Input errors   : %s" % (counter_data["err_input"]))
+        print(" Process errors : %s" % (counter_data["err_process"]))
+        print(" Written        : %s  | %s" % (counter_data["writer"], net_result))
+        print("==============================================")
+        # print("%d input molecules processed" % counter)
+        # # calculate percentages
+        # print("%d molecules written (%s)" % (written_count, net_result))
+        # print("%d molecules skipped (errors)" % skipped)
 
     def _send_poison_pills(self):
         """send poison pills to fill the output queue"""
         for i in range(self.max_proc):
             # send poison pills
             self._target_queue.put(None)
+        if not self.queue_err is None:
+            self.queue_err.put(None)
 
     def __recursive_dict_match(self, source: dict, target: dict) -> None:
         """function to use an arbitrarily nested dict to change values in an
@@ -306,9 +362,10 @@ class ScrubberCore(object):
 
 
 if __name__ == "__main__":
-    import sys
-    from pprint import pprint as pp
-
+    # TODO add an option to create run an instance of this object and run it with a JSON file input?
+    # import sys
+    import json
+    # from pprint import pprint as pp
     config = ScrubberCore.get_defaults()
     print("CONFIG!")
-    pp(config)
+    # pp(config)

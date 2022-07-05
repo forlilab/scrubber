@@ -1,9 +1,34 @@
 import multiprocessing
+import argparse
 
 from .transform.isomer import MoleculeIsomers
-from .storage import MoleculeProvider, MoleculeStorage
+from .storage import MoleculeProvider, MoleculeStorage, MoleculeIssueStorage
 from .geom.geometry import ParallelGeometryGenerator
 from .core import ScrubberCore
+
+__doc__ = """
+This file contains all the information related to the CLI.
+Command-line options are defined here, together with their description. All options are initialized to the default values of ther corresponding classes for each function.
+"""
+
+
+"""These are the tags (prefixes) that get automatically prepended to all options
+pertaining a given function class.
+"""
+tags = {
+    "input": "in_",
+    "output": "out_",
+    "isomers": "iso_",
+    "geometry": "geom_",
+    "log": "log_",
+    "filter_pre": "filtpre_",
+    "filter_post": "filtpost_",
+    "reaction": "react_",
+    "errors": "err_",
+    "general": "",
+}
+tags_reverse = {v[:-1]: k for k, v in tags.items() if v}
+
 
 description = """
 DESCRIPTION
@@ -39,9 +64,13 @@ This is where the full pipeline is described (scrubber.core.process())
 
 # TODO make sure they all have reasonable or accurate defaults
 
+from pprint import pprint as pp
+
 isomer_default = MoleculeIsomers.get_defaults()
+pp(isomer_default)
 molprovider_default = MoleculeProvider.get_defaults()
 molstorage_default = MoleculeStorage.get_defaults()
+molerror_default = MoleculeIssueStorage.get_defaults()
 geom_default = ParallelGeometryGenerator.get_defaults()
 general_default = ScrubberCore.get_defaults()["general"]["values"]
 
@@ -50,179 +79,221 @@ cli_options = {
         "description": "options for input definition and parsing.",
         "values": {
             "--in_fname": {
-                "help": "input file to process (SMI, SDF). The file type is guessed from the extension, unless the --in_ftype option is used.",
+                "help": """ [ REQUIRED ] input file to process (SMI, SDF). The file type is
+                guessed from the extension, unless the --in_ftype option is used. """,
                 "action": "store",
                 "metavar": "INPUT_FILE[.EXT]",
                 "required": True,
+                "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--in_ftype": {
-                "help": "specify the format of the input file, overriding the extension (i.e., parsing SMILES files with '.txt' extension); the format has to be one of the supported types (SMI or SDF); NOTE: if a molecule does not have a name defined, the \"MOL\" name will be set by default",
+                "help": """specify the format of the input file, overriding
+                the extension (i.e., parsing SMILES files with '.txt' extension);
+                the format has to be one of the supported types (SMI or SDF); NOTE:
+                if a molecule does not have a name defined, the \"MOL\" name will
+                be set by default [ default: guessed from --in_fname ]""",
                 "action": "store",
                 "metavar": "EXT",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--in_sanitize": {
-                "help": "perform automatic sanitization of the input using RDKit",
+                "help": """perform automatic sanitization of the input
+                using RDKit [ default: %s ]"""
+                % (str(molprovider_default["sanitize"])),
                 "action": "store",
                 "required": False,
-                "metavar": "[%s]"
-                % (
-                    str(
-                        molprovider_default["sanitize"],
-                    )
-                ),
+                "metavar": "true|false",
                 "type": type(molprovider_default["sanitize"]),
-                "default": molprovider_default["sanitize"],
+                "default": argparse.SUPPRESS,
             },
             "--in_removeHs": {
-                "help": "remove hydrogens from input structure, if present",
+                "help": """remove hydrogens from input structure, if present
+                [ default: %s ]"""
+                % str(molprovider_default["removeHs"]),
                 "action": "store",
-                # "metavar": "[.EXT]",
                 "required": False,
-                "metavar": "[%s]"
-                % (
-                    str(
-                        molprovider_default["removeHs"],
-                    )
-                ),
+                "metavar": "true|false",
                 "type": type(molprovider_default["removeHs"]),
-                "default": molprovider_default["removeHs"],
+                "default": argparse.SUPPRESS,
             },
             "--in_strictParsing": {
-                "help": "perform strict parsing with RDKit; molecules will be skipped if any inaccuracies are found [CLARIFY THIS!]",
-                "action": "store",
-                "metavar": "[%s]"
+                "help": """perform strict parsing with RDKit; molecules will be skipped
+                if any inaccuracies are found [CLARIFY THIS!]  [ default: %s ]"""
                 % (
                     str(
                         molprovider_default["strictParsing"],
                     )
                 ),
+                "action": "store",
+                "metavar": "true|false",
                 "type": type(molprovider_default["strictParsing"]),
-                "default": molprovider_default["strictParsing"],
+                # "default": molprovider_default["strictParsing"],
+                "default": argparse.SUPPRESS,
             },
             "--in_name_property": {
-                "help": "[SDF only] use the specified property field to name the molecule. If the --out_split option is used, this will be the filename.",
+                "help": """[SDF ONLY] use the specified property field to name the
+                molecule. If the --out_split option is used, this will be the filename.""",
                 "action": "store",
                 "metavar": '"property name"',
                 "required": False,
                 "type": str,
-                "default": None,
+                # "default": None,
+                "default": argparse.SUPPRESS,
             },
             "--in_safeparsing": {
-                "help": "parse input files in safe mode, instead of using RDKit native parsers; enable saving problematic raw input text into log files; it can be slower than using unsafe parsing",
+                "help": """parse input files in safe mode, instead of using RDKit
+                native parsers; enable saving problematic raw input text into log files;
+                it could be slower than using unsafe parsing [ default: %s ]"""
+                % molprovider_default["safeparsing"],
                 "action": "store",
-                "metavar": "%s" % (str()),
+                "metavar": "true|false",
                 "required": False,
-                "metavar": "[%s]"
-                % (
-                    str(
-                        molprovider_default["safeparsing"],
-                    )
-                ),
                 "type": type(molprovider_default["safeparsing"]),
-                "default": molprovider_default["safeparsing"],
+                # "default": molprovider_default["safeparsing"],
+                "default": argparse.SUPPRESS,
             },
             "--in_discarded_datafile": {
-                "help": "save raw input text of problematic molecules in the specified datafile for further inspection",
+                "help": """specify a file where problematic data from the input file
+                will be saved if parsing errors occurr. The file will be in text format,
+                to preserve the original input data [ default: %s ]"""
+                % molprovider_default["discarded_datafile"],
                 "action": "store",
-                # "metavar": "[.EXT]",
+                "metavar": "PROBLEMATIC_INPUT.EXT",
                 "required": False,
-                "type": str,
-                "default": None,
+                "type": type(molprovider_default["discarded_datafile"]),
+                # "default": None,
+                "default": argparse.SUPPRESS,
             },
             "--in_start_count": {
-                "help": "start processing the file from the specified n-th molecule (included)",
+                "help": """start processing the input file from the specified n-th
+                molecule (included); molecules before the specified count will be
+                ignored [ default: %s ]"""
+                % molprovider_default["start_count"],
                 "action": "store",
                 "metavar": "NUMBER",
                 "required": False,
-                "type": int,
-                "default": None,
+                "type": type(molprovider_default["start_count"]),
+                # "default": None,
+                "default": argparse.SUPPRESS,
             },
             "--in_end_count": {
-                "help": "stop processing the file at the specified n-th molecule (included)",
+                "help": """stop processing the file at the specified n-th molecule
+                (included); molecules after the specified count will be ignored
+                [ default: %s ]"""
+                % molprovider_default["end_count"],
                 "action": "store",
                 "metavar": "NUMBER",
                 "required": False,
-                "type": int,
-                "default": None,
+                "type": type(molprovider_default["end_count"]),
+                # "default": None,
+                "default": argparse.SUPPRESS,
             },
         },
     },
     "output": {
         "description": "options for output definition and saving.",
         "values": {
-            "--out_mode": {
-                "help": """define how the output data is saved; by default the
-            \'single\' mode is used, writing all the output in a single file;
-            if the \'split\' mode is used, then each molecule will be saved in
-            individual files; the output filenames can be controlled with the XXXX option """,
-                "action": "store",
-                "metavar": "[single] | split",
-                "type": type(molstorage_default["mode"]),
-                "default": molstorage_default["mode"],
-            },
             "--out_fname": {
-                "help": """specify the output filename; by default the file
-            extension will be used to set the file format, unless the option
-            \'--out_ftype\' is used; if a fullpath with explicit directories
-            will be specified, the directories will be created automatically,
-            if necessary """,
+                "help": """[ REQUIRED ] specify the output filename; by default the file
+                extension will be used to set the file format, unless the option
+                \'--out_ftype\' is used; if a fullpath with explicit directories
+                is specified, the directories will be created automatically; in
+                \"split\" mode, the file name will be prepended to whatever value
+                is specified in the \"--out_naming\" option""",
                 "action": "store",
                 "metavar": "OUTPUT_FNAME[.EXT]",
                 "required": True,
+                "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--out_ftype": {
-                "help": "specify the format of the output file, overriding the extension (i.e., writing SMILES files with '.txt' extension); the format has to be one of the supported types (SMI or SDF).",
+                "help": """specify the format of the output file, overriding the
+                extension (i.e., writing SMILES files with '.txt' extension); the
+                format has to be one of the supported types (SMI or SDF); by default
+                the format type is guessed from the file specified in --out_fname""",
                 "action": "store",
                 "metavar": "EXT",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--out_format_opts": {
-                "help": "format-specific options: SMI and SDF (some stuff from RDKIT?) -> SMI:titleLine option",
+                "help": """format-specific options: SMI and SDF (some stuff from
+                RDKIT?) -> SMI:titleLine option""",
                 "action": "store",
                 "metavar": "SOMETHING HERE",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
+            },
+            "--out_mode": {
+                "help": """define how the output data is saved; by default the
+                \'single\' mode is used, writing all the output in a single file;
+                if the \'split\' mode is used, then each molecule will be saved in
+                individual files; the output filenames can be controlled with the
+                \"--out_naming\" option [ default: %s ] """
+                % molstorage_default["mode"],
+                "action": "store",
+                "metavar": "single|split",
+                "type": type(molstorage_default["mode"]),
+                # "default": molstorage_default["mode"],
+                "default": argparse.SUPPRESS,
             },
             "--out_naming": {
-                "help": "[split mode only] when saving a file for each molecule, define which naming scheme to use, by default 'auto' mode is used, ; alternatively the 'name' mode can be useed",
+                "help": """[SPLIT MODE ONLY] when saving a file for each molecule,
+                define which naming scheme to use, by default 'auto' mode is used;
+                alternatively the 'name' mode can be useed XXXX EXPAND """,
                 "action": "store",
-                "metavar": "'auto'|'name'",
+                "metavar": "auto|name",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--out_max_lig_per_dir": {
-                "help": "[SPLIT MODE ONLY] create sub-directories containing no more than the specified number of ligands",
+                "help": """[SPLIT MODE ONLY] create progressively numbered
+                sub-directories containing no more than the specified number
+                of ligands [ default: disabled ]""",
                 "action": "store",
                 "metavar": "NUMBER",
                 "required": False,
                 "type": int,
+                "default": argparse.SUPPRESS,
             },
             "--out_disable_name_sanitize": {
-                "help": '[SPLIT MODE ONLY] by default the molecule name used for the output file name is sanitized by removing spaces, parentheses ( "{}", "[]" ) and other unsafe characters; this option disables it',
+                "help": """[SPLIT MODE ONLY] by default the molecule name used for
+                the output file name is sanitized by removing spaces, parentheses
+                ( "{}", "[]" ) and other unsafe characters; this option disables it
+                [ default: %s ]"""
+                % str(molstorage_default["disable_name_sanitize"]),
                 "action": "store",
                 "metavar": "NUMBER",
                 "required": False,
                 "type": bool,
-                "default": False,
+                # "default": False,
+                "default": argparse.SUPPRESS,
             },
             "--out_disable_preserve_properties": {
-                "help": 'by default, if the input molecules have properties associated (i.e. SDF extra fields, "PUBCHEM_COMPOUND_CID"), they will be preserved in the output file; this option disables it so no properties will be saved in the output [SDF only]',
+                "help": 'by default, if the input molecules have properties associated (i.e. SDF extra fields, "PUBCHEM_COMPOUND_CID"), they will be preserved in the output file; this option disables it so no properties will be saved in the output [SDF ONLY]',
                 "action": "store",
                 # "metavar": "[.EXT]",
                 "required": False,
                 "type": bool,
-                "default": False,
+                # "default": False,
+                "default": argparse.SUPPRESS,
             },
         },
     },
     "filter_pre": {
         # TODO this needs to be updated once the classes are completed
-        "description": "Options for pre-filter settings (i.e. before any processing occurs)",
+        "description": """Options for pre-filter settings (i.e. as soon as
+        molecules are loaded and  before any processing occurs); by defaults
+        all filters are disabled, and can be enabled by defining any filter
+        values.""",
         "values": {
             "--filtpre_mw_max": {
                 "help": "max mw to accept",
@@ -230,13 +301,15 @@ cli_options = {
                 "metavar": "MAX_MW",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_mw_min": {
                 "help": "min mw to accept",
                 "action": "store",
                 "metavar": "MIN_MW",
                 "required": False,
-                "type": float,
+                # "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_num_at_min": {
                 "help": "min num atoms to accept",
@@ -244,6 +317,7 @@ cli_options = {
                 "metavar": "MIN_NUM_ATOMS",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_num_at_max": {
                 "help": "max num atoms to accept",
@@ -251,6 +325,7 @@ cli_options = {
                 "metavar": "MAX_NUM_ATOMS",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_smarts_wanted": {
                 "help": "SMARTS pattern of wanted molecules (DEFINE A FILE HERE)",
@@ -258,6 +333,7 @@ cli_options = {
                 "metavar": "SMARTS_STRING",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_smarts_not_wanted": {
                 "help": "SMARTS pattern of not wanted molecules (DEFINE A FILE HERE)",
@@ -265,6 +341,7 @@ cli_options = {
                 "metavar": "SMARTS_STRING",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--filtpre_pains_family": {
                 "help": "PAINS family of patterns to reject (allowed: a, b, all)",
@@ -272,11 +349,16 @@ cli_options = {
                 "metavar": "[a|b|c|all]",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
         },
     },
+    # TODO this needs to be updated once the classes are completed
     "filter_post": {
-        "description": "Options for post-filter settings (i.e. before any processing occurs)",
+        "description": """Options for post-filter settings (i.e. after
+        processing occurred and before getting saved to the output)
+        by defaults all filters are disabled, and can be
+        enabled by defining any filter values.""",
         "values": {
             "--filtpost_mw_max": {
                 "help": "max mw to accept",
@@ -284,6 +366,7 @@ cli_options = {
                 "metavar": "MAX_MW",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_mw_min": {
                 "help": "min mw to accept",
@@ -291,6 +374,7 @@ cli_options = {
                 "metavar": "MIN_MW",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_num_at_min": {
                 "help": "min num atoms to accept",
@@ -298,6 +382,7 @@ cli_options = {
                 "metavar": "MIN_NUM_ATOMS",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_num_at_max": {
                 "help": "max num atoms to accept",
@@ -305,6 +390,7 @@ cli_options = {
                 "metavar": "MAX_NUM_ATOMS",
                 "required": False,
                 "type": float,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_smarts_wanted": {
                 "help": "SMARTS pattern of wanted molecules (DEFINE A FILE HERE)",
@@ -312,6 +398,7 @@ cli_options = {
                 "metavar": "SMARTS_STRING",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_smarts_not_wanted": {
                 "help": "SMARTS pattern of not wanted molecules (DEFINE A FILE HERE)",
@@ -319,6 +406,7 @@ cli_options = {
                 "metavar": "SMARTS_STRING",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--filtpost_pains_family": {
                 "help": "PAINS family of patterns to reject (allowed: a, b, all)",
@@ -326,11 +414,12 @@ cli_options = {
                 "metavar": "[a|b|c|all]",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
         },
     },
     "reaction": {
-        "description": "Options for controlling chemical reactions",
+        "description": "Options for performing chemical modifications of the input molecules",
         "values": {
             "--react_mode": {
                 "help": 'specify the mode of reaction to be exhaustive ("all") or individual enumeration of each reaction site ("single"))',
@@ -338,6 +427,7 @@ cli_options = {
                 "metavar": "all|single",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--react_reactions_file": {
                 "help": "specify a file containing SMIRKS reactions (one per line) to be used for the transformations",
@@ -345,6 +435,7 @@ cli_options = {
                 "metavar": "FILENAME",
                 "required": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--react_verbose": {
                 "help": "enable verbose mode for the reaction to track the procress -- WARNING: this can generate a lot of data when processing many molecules",
@@ -352,6 +443,7 @@ cli_options = {
                 "metavar": "",
                 "required": False,
                 "type": bool,
+                "default": argparse.SUPPRESS,
             },
             "--react_keep_only_reacted": {
                 "help": "keep only molecules that reacted; molecules that do not react are discarded",
@@ -359,172 +451,226 @@ cli_options = {
                 "metavar": "",
                 "required": False,
                 "type": bool,
+                "default": argparse.SUPPRESS,
             },
         },
     },
     "isomers": {
-        "description": "Options for all isomeric transformations (tautomers, protomers, stereoisomers)",
+        "description": """Options for all isomeric transformations (tautomers,
+        protomers, stereoisomers)""",
         "values": {
             #
             # stereoisomers
             #
             "--iso_stereo_enum": {
-                "help": "enable stereoisomer enumeration; it is possible to process only stereo centers with unspecified chirality, or all stereocenters (including those in for which explicit chirality is defined)",
+                "help": """enable stereoisomer enumeration; it is possible to process
+                only stereo centers with unspecified chirality (\"undefined\"), or all
+                stereocenters (\"all\") (including those in for which explicit chirality
+                is defined) [ default: disabled ]""",
                 "action": "store",
-                "metavar": "False|undefined|all",
+                "metavar": "undefined|all",
                 "required": False,
-                "default": False,
                 "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--iso_stereo_max_results": {
-                "help": "maximum number of stereoisomers to enumerate",
+                "help": """maximum number of stereoisomers to enumerate; if this number is
+                exceeded, the enumeration is stopped [ default : %d ]"""
+                % isomer_default["stereo_max_results"],
                 "action": "store",
                 "metavar": "INT",
                 "required": False,
                 "type": type(isomer_default["stereo_max_results"]),
-                "default": isomer_default["stereo_max_results"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_stereo_gen3d": {
-                "help": "attempt to generate 3D coordinates for the enumerated molecules",
+                "help": """enable the generation of 3D coordinates for the newly
+                enumerated steroisomers (TODO: MAYBE REMOVE? WHEN NEEDED?)[ default: %s ]"""
+                % str(isomer_default["stereo_gen3d"]),
                 "action": "store",
-                "metavar": "",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(isomer_default["stereo_gen3d"]),
-                "default": isomer_default["stereo_gen3d"],
+                # "default": isomer_default["stereo_gen3d"],
+                "default": argparse.SUPPRESS,
             },
             #
             # protomers
             #
             "--iso_proto_enum": {
-                "help": "enable protomer enumeration",
+                "help": """enable/disable protomer enumeration; the pH value/ranges
+                can be specified with the \"--iso_proto_pH\" option [ default: %s ]"""
+                % str(isomer_default["proto_enum"]),
                 "action": "store",
-                "metavar": "",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(isomer_default["proto_enum"]),
-                "default": isomer_default["proto_enum"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_proto_pH": {
-                "help": "specify the pH for the protomer enumeration; if a single value is specified, then all reactions above that pH will be performed (e.g. '--iso_proto_pH 7.4'); if two comma-separated values are specified then all protomer transformation within that range will be peformed (e.g.: '--iso_proto_pH 6.4,8.4)",
+                "help": """specify the pH for the protomer enumeration; if a
+                single value is specified, then all reactions above that pH
+                will be performed (e.g. '--iso_proto_pH 7.4'); if two
+                comma-separated values are specified then all protomer
+                transformation within that range will be peformed (e.g.:
+                '--iso_proto_pH 6.4,8.4) [ default: %2.1f ]"""
+                % isomer_default["proto_pH"],
                 "action": "store",
                 "metavar": "pH_value|pH_min,pH_max",
                 "required": False,
-                "type": type(isomer_default["proto_pH"]),
-                "default": isomer_default["proto_pH"],
+                # "type": type(isomer_default["proto_pH"]),
+                # this should be kept as a str type because it can be
+                # either a float or a tuple of floats
+                "type": str,
+                "default": argparse.SUPPRESS,
             },
             "--iso_proto_max_results": {
-                "help": "maximum number of protomers to enumerate",
+                "help": """maximum number of protomers to enumerate; if this
+                number if exceeded, the generation is stopped and only the
+                [max_results] results enumerated will be processed further [ default: %d ]"""
+                % isomer_default["proto_max_net_charge"],
+                "action": "store",
+                "metavar": "INT",  # % isomer_default["proto_max_results"],
+                "required": False,
+                "type": type(isomer_default["proto_max_results"]),
+                # "default": isomer_default["proto_max_results"],
+                "default": argparse.SUPPRESS,
+            },
+            "--iso_proto_keep_all": {
+                "help": """by default, exaustive protomer generation is performed
+                and only final products are reported; if this flag is used, all
+                intermediate protomers are kept, too [ default: %s ]"""
+                % isomer_default["proto_keep_all"],
+                "action": "store",
+                "metavar": "true|false",
+                "required": False,
+                "type": type(isomer_default["proto_keep_all"]),
+                "default": argparse.SUPPRESS,
+            },
+            "--iso_proto_max_net_charge": {
+                "help": """molecules which absolute formal charges exceed this
+                value are discarded [ default: %d ]"""
+                % isomer_default["proto_max_net_charge"],
                 "action": "store",
                 "metavar": "INT",
                 "required": False,
-                "type": type(isomer_default["proto_max_results"]),
-                "default": isomer_default["proto_max_results"],
-            },
-            "--iso_proto_keep_all": {
-                "help": "by default, exaustive protomer generation is performed and only final products are reported; if this flag is used, all intermediate protomers are kept, too",
-                "action": "store_true",
-                # "metavar": "[ %s ]" % str(isomer_default["proto_keep_all"]),
-                "required": False,
-                # "type": type(isomer_default["proto_keep_all"]),
-                "default": isomer_default["proto_keep_all"],
-            },
-            "--iso_proto_max_net_charge": {
-                "help": "molecules which absolute formal charges exceed this value are discarded",
-                "action": "store",
-                "metavar": "CHARGE",
-                "required": False,
                 "type": type(isomer_default["proto_max_net_charge"]),
-                "default": isomer_default["proto_max_net_charge"],
+                "default": argparse.SUPPRESS,
             },
-            "--iso_proto_neutralize": {
-                "help": "generate neutral form of input molecules. WARNING: when used, protomer transformations will be disabled",
+            "--iso_proto_neutralize_only": {
+                "help": """generate neutral form of input molecules. WARNING:
+                when used, all other protomer transformations will be disabled
+                [default: %s]"""
+                % isomer_default["proto_neutralize_only"],
                 "action": "store_true",
-                # "metavar": "",
                 "required": False,
-                # "type": type(isomer_default["proto_neutralize"]),
-                "default": isomer_default["proto_neutralize"],
+                # "default": isomer_default["proto_neutralize"],
+                "default": argparse.SUPPRESS,
             },
             #
             # tautomers
             #
             "--iso_tauto_enum": {
-                "help": "enable tautomer enumeration",
+                "help": "enable tautomer enumeration [ default: %s ]"
+                % isomer_default["tauto_enum"],
+                "action": "store",
+                "metavar": "true|false",
+                "required": False,
+                "type": type(isomer_default["tauto_enum"]),
+                "default": argparse.SUPPRESS,
+            },
+            "--iso_tauto_max_results": {
+                "help": """max number of tautomers to enumerate
+                    [ default: %d ]"""
+                % isomer_default["tauto_max_results"],
                 "action": "store",
                 "metavar": "INT",
                 "required": False,
-                "type": type(isomer_default["tauto_enum"]),
-                "default": isomer_default["tauto_enum"],
-            },
-            "--iso_tauto_max_results": {
-                "help": "max number of tautomers to enumerate",
-                "action": "store",
-                "metavar": "",
-                "required": False,
                 "type": type(isomer_default["tauto_max_results"]),
-                "default": isomer_default["tauto_max_results"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_tauto_protect_aromatic": {
-                "help": "when generating tautomers, discard those reducing the number of aromatic atoms in the system; by setting this option to 'False', less stable tautomers with fewer aromatic atoms will be kept",
+                "help": """when generating tautomers, discard those reducing
+                the number of aromatic atoms in the system; by setting this
+                option to 'False', less stable tautomers with fewer aromatic
+                atoms will be kept [ default: %s ]"""
+                % str(isomer_default["tauto_protect_aromatic"]),
                 "action": "store",
-                "metavar": "",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(isomer_default["tauto_protect_aromatic"]),
-                "default": isomer_default["tauto_protect_aromatic"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_tauto_protect_amide": {
-                "help": "when generating tautomers, discard those reducing the number of amide groups in the system; by setting this option to 'False', less stable tautomers with fewer amide groups atoms will be kept",
+                "help": """when generating tautomers, discard those reducing
+                the number of amide groups in the system; by setting this
+                option to 'False', less stable tautomers with fewer amide
+                groups atoms will be kept [ default: %s ]"""
+                % str(isomer_default["tauto_protect_amide"]),
                 "action": "store",
                 "metavar": "",
                 "required": False,
                 "type": type(isomer_default["tauto_protect_amide"]),
-                "default": isomer_default["tauto_protect_amide"],
+                "default": argparse.SUPPRESS,
             },
             #
             # generic
             #
             "--iso_add_hydrogens": {
-                "help": "when enumerating isomers, add hydrogens to the final products",
+                "help": """when enumerating isomers, add hydrogens to the
+                    final products [ default: %s ]"""
+                % str(isomer_default["add_hydrogens"]),
                 "action": "store",
-                "metavar": "",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(isomer_default["add_hydrogens"]),
-                "default": isomer_default["add_hydrogens"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_max_cycles": {
-                "help": "when generating both protomers and tautmers, this option defines how many times the process (protomer+tautomers) is repeated to make sure all products are generated ",
+                "help": """when generating both protomers and tautmers, this
+                option defines how many times the process (protomer+tautomers)
+                is repeated to make sure all products are generated [ default: %d ]"""
+                % isomer_default["max_cycles"],
                 "action": "store",
                 "required": False,
-                # "metavar": isomer_default["max_cycles"],
-                # "type": type(isomer_default["max_cycles"]),
-                "default": isomer_default["max_cycles"],
+                "metavar": "INT",
+                "type": type(isomer_default["max_cycles"]),
+                "default": argparse.SUPPRESS,
             },
             "--iso_verbose": {
-                "help": "enable verbose mode for all isomeric transformations to track the procress -- WARNING: this can generate a lot of data when processing many molecules",
+                "help": """enable verbose mode for all isomeric transformations
+                to track the procress -- WARNING: this can generate a lot of
+                data when processing many molecules [ default: %s ]"""
+                % str(isomer_default["verbose"]),
                 "action": "store_true",
-                # "metavar": "[ %s ]" % str(isomer_default["verbose"]),
+                # "metavar": "true|false",
                 # "type": type(isomer_default["verbose"]),
-                "default": isomer_default["verbose"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_ph_datafile": {
-                "help": "specify a custom file for the pH model transformations",
+                "help": """specify a custom file for the pH model transformations
+                (see advanced help)""",
                 "action": "store",
                 "metavar": "FILENAME",
                 "type": str,
-                "default": isomer_default["ph_datafile"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_tauto_datafile": {
-                "help": "specify a custom file for the tautomer model transformations",
+                "help": """specify a custom file for the tautomer model transformations
+                (see advanced help)""",
                 "action": "store",
                 "metavar": "FILENAME",
                 "type": str,
-                "default": isomer_default["tauto_datafile"],
+                "default": argparse.SUPPRESS,
             },
             "--iso_suppress_rdkit_warnings": {
-                "help": "disable warning messages from RDKit when sanitizing molecules",
+                "help": """disable warning messages from RDKit when sanitizing molecules [ default: %s ]"""
+                % str(isomer_default["suppress_rdkit_warnings"]),
                 "action": "store",
-                "metavar": "True|False",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(isomer_default["add_hydrogens"]),
-                "default": isomer_default["add_hydrogens"],
+                "default": argparse.SUPPRESS,
             },
         },
     },
@@ -532,87 +678,108 @@ cli_options = {
         "description": "Options the generation of accurate 3D coordinates",
         "values": {
             "--geom_add_h": {
-                "help": "add hydrogens to the newly generated 3D structures",
+                "help": """add hydrogens to the newly generated 3D structures [ default: %s ]"""
+                % str(geom_default["add_h"]),
                 "action": "store",
-                "metavar": "True|False",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["add_h"]),
-                "default": geom_default["add_h"],
+                # "default": geom_default["add_h"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_force_trans_amide": {
-                "help": "guarantee that secondary amide are in a trans conformation",
+                "help": """guarantee that acyclic secondary amide are in a
+                trans conformation [ default: %s ]"""
+                % str(geom_default["force_trans_amide"]),
                 "action": "store",
-                "metavar": "True|False",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["force_trans_amide"]),
-                "default": geom_default["force_trans_amide"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_force_field": {
-                "help": "set the force field to be used for the 3D coordinates optimization",
-                "action": "store",
-                "metavar": "uff|mmff94|mmff94s    [ default: %s ]"
+                "help": """set the force field to be used for the 3D coordinates
+                optimization [ default: %s ]"""
                 % geom_default["force_field"],
+                "action": "store",
+                "metavar": "uff|mmff94|mmff94s",
                 "required": False,
                 "type": type(geom_default["force_field"]),
-                "default": geom_default["force_field"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_max_iterations": {
-                "help": "maximum number of iterations for to perform at each minimization cycle",
+                "help": """maximum number of iterations for to perform at each
+                minimization cycle [ default: %d ]"""
+                % geom_default["max_iterations"],
                 "action": "store",
-                "metavar": geom_default["max_iterations"],
+                "metavar": "INT",
                 "required": False,
                 "type": type(geom_default["max_iterations"]),
-                "default": geom_default["max_iterations"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_auto_iter_cycles": {
-                "help": "set the maximum number of minimization cycles (or attempts) performed on molecules to achieve convergence; the number of iterations at each cycle is defined by the option '--gen_max_iterations'",
+                "help": """set the maximum number of minimization cycles (or attempts)
+                performed on molecules to achieve convergence; the number of iterations
+                at each cycle is defined by the option \"--gen_max_iterations\"
+                [ defaults: %d ]"""
+                % geom_default["auto_iter_cycles"],
                 "action": "store",
-                "metavar": geom_default["auto_iter_cycles"],
+                "metavar": "INT",
                 "required": False,
                 "type": type(geom_default["auto_iter_cycles"]),
-                "default": geom_default["auto_iter_cycles"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_gen3d": {
-                "help": "generate new 3D coordinates prior to optimizing them using the ETKDG implemented in RDKit; if set to False, this option can be used to further minimize molecules with valid 3D coordinates",
+                "help": """generate new 3D coordinates prior to optimizing them using
+                the ETKDG implemented in RDKit; if set to False, this option can be
+                used to further minimize molecules with valid 3D coordinates [ default: %s ]"""
+                % geom_default["gen3d"],
                 "action": "store",
-                "metavar": "True|False    [ default: %s ]" % geom_default["gen3d"],
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["gen3d"]),
-                "default": geom_default["gen3d"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_gen3d_max_attempts": {
-                "help": "define how many times initial generation of 3D coordinates is performed, in case of failure",
+                "help": """define how many times initial generation of 3D coordinates is
+                performed, in case of failure [ default: %d ]"""
+                % geom_default["gen3d_max_attempts"],
                 "action": "store",
-                "metavar": geom_default["gen3d_max_attempts"],
+                "metavar": "INT", # geom_default["gen3d_max_attempts"],
                 "required": False,
                 "type": type(geom_default["gen3d_max_attempts"]),
-                "default": geom_default["gen3d_max_attempts"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_fix_ring_corners": {
-                "help": "process 6-membered rings to prevent boat conformatons and identify the optimal chair conformations",
-                "action": "store",
-                "metavar": "True|False  [default: %s]"
+                "help": """process 6-membered rings to prevent boat conformatons and
+                identify the optimal chair conformations [ default: %s ]"""
                 % str(geom_default["fix_ring_corners"]),
+                "action": "store",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["fix_ring_corners"]),
-                "default": geom_default["fix_ring_corners"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_preserve_mol_properties": {
-                "help": "[SDF ONLY] preserve properties in the input molecule",
-                "action": "store",
-                "metavar": "True|False  [default: %s]"
+                "help": """[SDF ONLY] preserve properties in the input
+                    molecule [ default: %s ]"""
                 % str(geom_default["preserve_mol_properties"]),
+                "action": "store",
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["preserve_mol_properties"]),
-                "default": geom_default["preserve_mol_properties"],
+                "default": argparse.SUPPRESS,
             },
             "--geom_strict": {
-                "help": "reject molecules for which geometry optimization did not converge (to rescue them, increase --geom_auto_iter_cycles and/or --geom_max_iterations)",
+                "help": """reject molecules for which geometry optimization did not
+                converge (to rescue them, increase --geom_auto_iter_cycles and/or
+                --geom_max_iterations) [ default: %s ]"""
+                % str(geom_default["strict"]),
                 "action": "store",
-                "metavar": "True|False  [default: %s]" % str(geom_default["strict"]),
+                "metavar": "true|false",
                 "required": False,
                 "type": type(geom_default["strict"]),
-                "default": geom_default["strict"],
+                "default": argparse.SUPPRESS,
             },
         },
     },
@@ -620,43 +787,89 @@ cli_options = {
         "description": "General options for the calculation setup",
         "values": {
             "--max_proc": {
-                "help": "maximum number of processors/cores to use (default: all %d available)"
+                "help": """maximum number of processors/cores to use [ default: %d on this machine ]"""
                 % multiprocessing.cpu_count(),
                 "action": "store",
                 "metavar": "PROC_NUM",
                 "required": False,
                 "type": type(general_default["max_proc"]),
-                "default": general_default["max_proc"],
+                "default": argparse.SUPPRESS,
             },
             "--nice_level": {
-                "help": "set the nice level (priority) of the processing; values range from 0 (standard priority; default) to 40 (lowest priority)",
+                "help": """set the nice level (priority) of the processing; values range
+                from 0 (standard priority) to 40 (lowest priority) [ default: 0 ]""",
                 "action": "store",
                 "metavar": "NICE_LEVEL",
                 "required": False,
                 "type": type(general_default["nice_level"]),
-                "default": general_default["nice_level"],
-            },
-            "--config_file": {
-                "help": "specify a JSON config file to be used for the processing; if used, additional command-line options will superseed the config file values; a template can be generated using the '--generate_template_config' option",
-                "action": "store",
-                "metavar": "config_file",
-                "required": False,
-                "type": str,
-                "default": None,
-            },
-            "--generate_template_config": {
-                "help": "save the full configuration options set into the specified file to be used to create custom config files for the '--config_file' option. If the file exists, the program will cowardly refuse to overwrite it",
-                "action": "store",
-                "metavar": "config_file",
-                "required": False,
-                "type": str,
-                "default": None,
-            },
-            "--help_advanced": {
-                "help": "print the advanced help",
-                "action": "store_true",
-                "required": False,
+                # "default": general_default["nice_level"],
+                "default": argparse.SUPPRESS,
             },
         },
+    },
+    "errors": {
+        "description": "Options to save problematic data",
+        "values": {
+            "--err_log_from_input": {
+                "help": """filename where to save problematic input structures; the file
+                will be the same type as the input file [ default: %s ]"""
+                % str(molerror_default["log_from_input"]),
+                "action": "store",
+                "metavar": "FILENAME",
+                "required": False,
+                "type": type(molerror_default["log_from_input"]),
+                "default": argparse.SUPPRESS,
+            },
+            "--err_log_from_process": {
+                "help": """filename where to save problematic structures encountered during
+                the processing (e.g.: geometry minimization); the file format (SDF, SMI)
+                will be automatically selected from the dimensionality of the first molecule
+                (TO BE CLAFIRIED [ default: %s ]"""
+                % str(molerror_default["log_from_process"]),
+                "action": "store",
+                "metavar": "FILENAME",
+                "required": False,
+                "type": type(molerror_default["log_from_process"]),
+                "default":argparse.SUPPRESS,
+            },
+            # "--process_err_ftype": {
+            #     "help": "file format of the processing errors file; allowed formats are SMI and SDF. ",
+            #     "action": "store",
+            #     "metavar": "smi|sdf",
+            #     "required": False,
+            #     "type": type(molerror_default["process_err_ftype"]),
+            #     "default": molerror_default["process_err_ftype"],
+            # },
+        },
+    },
+}
+
+
+"""these are extra options providing convenient CLI functionalities that are
+absent in the ScrubberCore"""
+extra_options = {
+    "--config_file": {
+        "help": "specify a JSON config file to read to configure the processing; if used, additional command-line options will superseed the config file values; a template can be generated using the '--generate_template_config' option",
+        "action": "store",
+        "metavar": "CONFIG_FILE.JSON",
+        "required": False,
+        "type": str,
+        "default": argparse.SUPPRESS,
+    },
+    "--save_config_template": {
+        "help": "save a template file containing all configuration options with their default values, to be customized and used with the '--config_file' option. If the file exists, the program will cowardly refuse to overwrite it",
+        "action": "store",
+        "metavar": "CONFIG_FILE.JSON",
+        "required": False,
+        "type": str,
+        "default": argparse.SUPPRESS,
+    },
+    # check if we want to keep this
+    "--help_advanced": {
+        "help": "print the advanced help",
+        "action": "store_const",
+        "required": None,
+        "const": True,
+        "default": argparse.SUPPRESS,
     },
 }

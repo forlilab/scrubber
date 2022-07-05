@@ -1,7 +1,7 @@
 # from scrubber import get_datafile
 
 from rdkit import Chem
-from .common import ScrubberClass
+from .common import ScrubberBase
 
 
 PAINS_FILES = {
@@ -15,7 +15,7 @@ PAINS_FILES = {
 # TODO incomplete class
 
 
-class MoleculeFilter(ScrubberClass):
+class MoleculeFilter(ScrubberBase):
     """class to filtermolecules basing on requested properties"""
 
     def __init__(

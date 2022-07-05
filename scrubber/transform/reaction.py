@@ -4,7 +4,7 @@ from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 
 
-from ..common import ScrubberClass, UniqueMoleculeContainer, mol2smi
+from ..common import ScrubberBase, UniqueMoleculeContainer, mol2smi
 # from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
 from .base import (
     MoleculeTransformations,
@@ -17,7 +17,7 @@ from .base import (
 REACTIONS_FILE = "reactions.txt"
 
 
-class Reactor(ScrubberClass, MoleculeTransformations):
+class Reactor(ScrubberBase, MoleculeTransformations):
     """perform chemical reactions to functionalize molecules
     # the two modes should be:
     #   - "all", (exhaustive, all sites saturated)

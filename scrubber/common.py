@@ -18,33 +18,25 @@ DATA_PATH = os.path.join(os.path.dirname(__file__), DATA_DIR)
 __all__ = ["DATA_PATH", "ScrubberClass", "UniqueMoleculeContainer"]
 
 
-class ScrubberClass(object):
-    """abstract class with the basic functionality that most (all?) scrubber
-    operations should have
+class ScrubberBase(object):
+    """abstract class with the basic functionality that most (all?) Scrubber
+    classes should have.
+    A class method provide access to the class init defaults by returning the
+    class `__init__` signature with default values as a dictionary
+    `{arg:default_value}`.
 
-    class methods provide access to the class defaults so that an external
-    class (e.g.: GUI, CLI manager...) can access the defaults without having to
-    explicitly create an class instance first
-
-    Inheriting classes should not need to run this class __init__() method,
-    e.g.: `super().__init__(self)` or `ScrubberOperation.__init__(self)`
-
-    >>> class ScrubberFancyOp(ScrubberUnit):
+    Inheriting classes should not run the base class __init__() method, but
+    they must implement the `_stop_at_defaults` argument (preferably as the
+    last one) to guarantee the `get_defaults` method works properly.
+    >>> class ScrubberNewClass(ScrubberClass):
     ...
     ...     [ class implementation here ]
     ...
     # to present init options to a driver class:
-    >>> scrubber_class_options = ScrubberClassNew.get_defaults()
+    >>> scrubber_class_options = ScrubberNewClass.get_defaults()
     >>> scrubber_class_options['key'] = False
     >>> sc = ScrubberClassNew(**scrubber_class_options)
     """
-
-    # TODO consider moving to this format to store also possible options and description?
-
-    # default_init = {"key1": {"value": True, "options": bool}}
-    # default_options = {"key": {"value": True, "options": bool}}
-    # default_init = {}
-
     def __init__(self, arguments, _stop_at_defaults: bool = False):
         """generic implementation of the init;
         inheriting classes will implement their own args, but keep the
@@ -64,8 +56,9 @@ class ScrubberClass(object):
         return cls(_stop_at_defaults=True).__dict__
 
     def get_datafile(self, fname: str) -> str:
-        """helper function to provide data files to classes from the default
-        location (defined by the DATA_DIR variable)"""
+        """helper function to provide the full-path of data files available in
+        the Scrubber module default
+        location ("scrubber/data", defined by the DATA_DIR variable)"""
         fullpath = os.path.join(DATA_PATH, fname)
         if not os.path.exists(fullpath):
             msg = (
@@ -76,54 +69,15 @@ class ScrubberClass(object):
             raise ValueError(msg)
         return fullpath
 
-    # @ classmethod
-    # def init_from_config(cls, config):
-    #     """method to initialize the class using a config dictionary; the
-    #     dictionary can be a full options dictionary created using the
-    #     get_defaults() method or contain only options to be modified; if one
-    #     unknown key is present, a ValueError exception will be raised """
-    #     expected_keys = cls.get_defaults().__dict__.keys()
-    #     bad_keys = [k for k in config if k not in expected_keys]
-    #         if len(bad_keys):
-    #             bad_keys = "\n".join(bad_keys)
-    #             print("ERROR: unexpected key(s) in config file:\n%s" % (bad_keys), file=sys.stderr)
-    #             raise ValueError
-    #     instance = cls(**config)
-    #     return instance
-
     def _build_opts_dict(self):
         """build and populate the self.options dictionary"""
         self.options = self.__dict__.copy()
 
-    # def process(self):
-    #     """stub implementation of the process main function"""
-    #     raise NotImplemented
-
-    # def __recursive_dict_match(self, source: dict, target: dict) -> None:
-    #     """function to use an arbitrarily nested dict to change values in an
-    #     arbitrarily nested dict
-
-    #     Warning: it should be used only to assign values as standard Python
-    #     types, no guarantee it is going to work with other types (i.e.,
-    #     classes)
-    #     """
-    #     curr_source = source
-    #     curr_target = target
-    #     for k, v in curr_source.items():
-    #         if not k in curr_target:
-    #             print("Warning: unrecognized keyword:", k, curr_target)
-    #             continue
-    #         if isinstance(v, dict):
-    #             self.__recursive_dict_match(v, curr_target[k])
-    #         else:
-    #             curr_target[k] = v
-
 
 class UniqueMoleculeContainer(object):
-    """Class to store RDKit molecules without duplicates. Use isomeric
-    canonical SMILES as unique key, unless chirality is disabled when
-    initialized.
-
+    """Class to store RDKit molecules without duplicates. Isomeric
+    canonical SMILES are used as unique keys, unless chirality is disabled when
+    the class is initialized.
     The container can be "sealed" to track any modifications (add/remove
     molecules, etc.) by changing the 'sealed' attribute.
 
@@ -134,29 +88,22 @@ class UniqueMoleculeContainer(object):
         > NC(Cc1nc2[nH]ncn2n1)C(=O)O
         > NC(Cc1nn2cnnc2[nH]1)C(=O)O
         > NC(Cc1nc2nncn2[nH]1)C(=O)O
-
         >>> len(x)
         3
-
         >>> for mol in x:
         ...     print(m)
         ...
         <Chem.rdchem.Mol object at 0x1462f1e36be0>
         <Chem.rdchem.Mol object at 0x1462f1e36dc0>
         <Chem.rdchem.Mol object at 0x1462f1e36c40>
-
         >>> x.add(mol3)
         False           # the molecule is already present in the container
-
         >>> len(x)
         3
-
         >>> x.add(mol4)
         True           # the molecule is not present in the container
-
         >>> len(x)
         4
-
         >>> for m in x:
         ...     print(m)
         ...
@@ -165,11 +112,9 @@ class UniqueMoleculeContainer(object):
         <Chem.rdchem.Mol object at 0x1462f1e36c40>
         <Chem.rdchem.Mol object at 0x1462f1e36b80>
 
-    Molecules can be retrieved using the 'get' method:
+    Molecules can be retrieved using the 'get' method with a SMILES or using indices:
         >>> x.get("c1cccccc1")
         <Chem.rdchem.Mol object at 0x1462f1e36be0>
-
-    or by using indices:
         >>> x[2]
         <Chem.rdchem.Mol object at 0x1462f1e36be0>
 
@@ -220,7 +165,7 @@ class UniqueMoleculeContainer(object):
         True
         >>> len(x)
         2
-        >>> x.remove_mol(mol9999)
+        >>> x.remove_mol(mol_non_existent)
         False
         >>> len(x)
         2
@@ -276,8 +221,8 @@ class UniqueMoleculeContainer(object):
                     % type(argument)
                 )
 
-    def add(self, mol: Chem.rdchem.Mol, replace=False) -> bool:
-        """add molecule if not present already; if replace==False, then the
+    def add(self, mol:Chem.rdchem.Mol, replace=False) -> bool:
+        """add RDKit molecule if not present already; if replace==False, then the
         molecule is replaced with the new mol object"""
         # key = Chem.MolToSmiles(Chem.RemoveHs(mol), isomericSmiles=self.__chirality)
         key = mol2smi(mol, self.__chirality)
@@ -322,9 +267,9 @@ class UniqueMoleculeContainer(object):
             self.remove_smiles(smi)
         return smi_list
 
-    def get(self, key, default=None):
-        """implement the get method with a default fallback
-        RDKit Mol objects can be retrieved by passing a SMILES
+    def get(self, key:str, default=None):
+        """implement the get method to retrieve RDKit Mol objects using a
+        SMILES string with a default value for missing items (default=None).
             >>> x = UniqueMoleculeContainer([mol1, mol2, mol3])
             >>> x.get("NON-EXISTENT", None)
             >>> x.get("c1cccccc1")
@@ -335,7 +280,7 @@ class UniqueMoleculeContainer(object):
         except:
             return default
 
-    def pop(self, index=0):
+    def pop(self, index=0)->Chem.rdchem.Mol:
         """pop molecules from the container. If no index is provided, the first
         molecule in the container gets removed"""
         try:
@@ -354,11 +299,15 @@ class UniqueMoleculeContainer(object):
                 )
             raise IndexError(msg)
 
-    def copy(self):
-        """create a (shallow) copy of the container"""
+    def copy(self)->"UniqueMoleculeContainer":
+        """return a (shallow) copy of the container"""
         return UniqueMoleculeContainer(self)
 
-    def clear(self):
+    def keys(self)->list:
+        """return all molecule keys (SMILES)"""
+        return list(self.__data.keys())
+
+    def clear(self)->None:
         """remove all molecules in the container; if the container is empty,
         the seal will not be broken"""
         self.sealed = len(self.__data) == 0
@@ -400,7 +349,7 @@ class UniqueMoleculeContainer(object):
         key = list(self.__data.keys())[self.__index]
         return self.__data[key]
 
-    def __add__(self, other):
+    def __add__(self, other:"UniqueMoleculeContainer"):
         """overload add operator (+)
         UniqueMoleculeContainer = UniqueMoleculeContainer + UniqueMoleculeContainer
         """
@@ -411,13 +360,13 @@ class UniqueMoleculeContainer(object):
                 new.__data[k] = v
         return new
 
-    def __radd__(self, other):
+    def __radd__(self, other:"UniqueMoleculeContainer")->"UniqueMoleculeContainer":
         """overload right-add operator ( x + self )
         UniqueMoleculeContainer = [ mol ] + UniqueMoleculeContainer
         """
         return self.__add__(other)
 
-    def __iadd__(self, other):
+    def __iadd__(self, other:"UniqueMoleculeContainer")->"UniqueMoleculeContainer":
         """overlad increment operator (+=)
         UniqueMoleculeContainer += UniqueMoleculeContainer
         """
@@ -431,7 +380,7 @@ class UniqueMoleculeContainer(object):
         """return the length of the container"""
         return len(self.__data.keys())
 
-    def __contains__(self, mol):
+    def __contains__(self, mol:Chem.rdchem.Mol):
         """membership operator
         >>> x = UniqueMoleculeContainer([mol1, mol2, mol3])
         >>> mol1 in x

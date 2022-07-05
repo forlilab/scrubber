@@ -20,22 +20,25 @@ if __name__ == "__main__":
     # pp(config)
 
     config["input"]["values"]["fname"] = sys.argv[1]
+    # config["errors"]["values"]["input_err_fname"] = "errors_proc.input"
+    # config["errors"]["values"]["process_err_fname"] = "errors_proc.sdf"
+    # config["errors"]["values"]["process_err_ftype"] = "sdf"
     # the protein
     # config["input"]["values"]["name_property"] = "NON_EXISTENT_PROPERTY"
     # config["input"]["values"]["start_count"] = 70000
     # config["input"]["values"]["start_count"] = 160
-    # config["input"]["values"]["end_count"] = 166
+    config["input"]["values"]["end_count"] = 50
 
     config["general"]["values"]["max_proc"] = 8
     config["general"]["values"]["nice"] = 40
 
     config["isomers"]["active"] = True
     config["isomers"]["values"]["verbose"] = False
-    config["isomers"]["values"]["ph_datafile"] = "..//scrubber/data/test_model.txt"
+    config["isomers"]["values"]["proto_enum"] = True
     config["isomers"]["values"]["proto_keep_all"] = False
-    config["isomers"]["values"]["proto_enum"] = False
     config["isomers"]["values"]["proto_pH"] = 7.4  # single value
-    config["isomers"]["values"]["proto_pH"] = [6.4, 8.4]  # pH range
+    config["isomers"]["values"]["ph_datafile"] = "..//scrubber/data/test_model.txt"
+    # config["isomers"]["values"]["proto_pH"] = [6.4, 8.4]  # pH range
 
     # config["isomers"]["values"]['stereoisomer_enum'] = 'undefined' #  'all', False
     config["isomers"]["values"]["stereo_enum"] = False
