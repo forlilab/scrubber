@@ -92,7 +92,7 @@ class MoleculeProvider(ScrubberBase):
         if self.use_pipe:
             self._source = PipeMolSupplier2()
         elif fname is not None:
-            print("[ FILE MODE ]")
+            #print("[ FILE MODE ]")
             name, ext = os.path.splitext(fname)
             ext = ext[1:].lower()
             if self.ftype == None:
@@ -228,7 +228,7 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
         max_lig_per_dir=0,  # it not 0, create automatically subdirectories each [max_lig_per_dir] ligands
         disable_name_sanitize: bool = False,  # disable sanitizing output filename (based on mol name)
         disable_preserve_properties: bool = False,  # disable preserving any extra properties found in the molecule
-        workers_count: int = 1,
+        num_poison_pills_needed: int = 1,
         # disable_rdkit_warnings: bool = True,
         queue: multiprocessing.Queue = None,
         comm_pipe: multiprocessing.Pipe = None,
@@ -264,7 +264,7 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
         self.max_lig_per_dir = max_lig_per_dir
         self.disable_name_sanitize = disable_name_sanitize
         self.disable_preserve_properties = disable_preserve_properties
-        self.workers_count = workers_count
+        self.num_poison_pills_needed = num_poison_pills_needed
         self.queue = queue
         self.comm_pipe = comm_pipe
         if _stop_at_defaults:
@@ -336,10 +336,10 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
                 if not self.comm_pipe is None:
                     self.comm_pipe.send("writer:%d" % self._counter)
                 return
-            if package is None:
-                # poison pill
-                self.workers_count -= 1
-                if self.workers_count == 0:
+            if package is None: # poison pill
+                self.num_poison_pills_needed -= 1
+                print("number of lives left: %d" % self.num_poison_pills_needed)
+                if self.num_poison_pills_needed == 0:
                     # TODO this might be superfluous
                     if not self.writer is None:
                         self.writer.close()

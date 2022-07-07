@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # config["isomers"]["values"]['proto_neutralize'] = True
 
     # reject molecules that did not converge
-    config["geometry"]["values"]["strict"] = True
+    #config["geometry"]["values"]["strict"] = True # TODO migrate from MPWorker to base class
 
     # common output format settings
     config["output"]["values"]["fname"] = "dest/testing.sdf"

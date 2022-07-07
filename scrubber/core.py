@@ -2,6 +2,8 @@ import multiprocessing
 from time import sleep
 import sys
 
+
+from rdkit import Chem
 from rdkit.Chem.PropertyMol import PropertyMol
 
 from .storage import (
@@ -9,7 +11,9 @@ from .storage import (
     MoleculeStorage,
     MoleculeIssueStorage,
 )
+
 from .geom.geometry import ParallelGeometryGenerator
+from .geom.geometry import GeometryGenerator
 from .filters import MoleculeFilter
 from .transform.isomer import MoleculeIsomers
 from .transform.reaction import Reactor
@@ -26,6 +30,50 @@ This file contains the core scrubber object
 INSPIRATION: https://xkcd.com/1343/
 
 """
+
+
+class MolPrep:
+    
+    def __init__(self, isomerizer, geom_opt):
+
+        assert(isomerizer is not None) # TODO
+        assert(geom_opt is not None) # TODO
+        self.isomerizer = isomerizer
+        self.geom_opt = geom_opt
+
+    def __call__(self, input_mol):
+        mol_list = []
+        isomer_report = self.isomerizer.process(input_mol)
+        for mol in self.isomerizer.mol_pool: # TODO mol_pool gonna fail with concurrency
+            report = self.geom_opt.process(mol)
+            #optmol = report["mol"]
+            mol_list.append(report)
+        return mol_list
+
+
+class MolPrepWorker(multiprocessing.Process):
+
+    def __init__(self, molprep, queue_in, queue_out):
+        multiprocessing.Process.__init__(self)
+        self.molprep = molprep
+        self.queue_in = queue_in
+        self.queue_out = queue_out
+
+    def run(self):
+        while True:
+            try:
+                input_mol = self.queue_in.get()
+                if input_mol is None:
+                    self.queue_out.put(None)
+                    break
+                mol_list = self.molprep(input_mol)
+                for mol in mol_list:
+                    self.queue_out.put(mol)
+            except KeyboardInterrupt:
+                print("Keyboard Interruption at MolPrepWorker")
+                break
+
+
 
 
 class ScrubberCore(object):
@@ -57,7 +105,7 @@ class ScrubberCore(object):
         },
         "output": {
             "values": MoleculeStorage.get_defaults(),
-            "ignore": ["queue", "comm_pipe", "workers_count"],
+            "ignore": ["queue", "comm_pipe", "num_poison_pills_needed"],
         },
         "filter_pre": {
             "active": False,
@@ -134,10 +182,10 @@ class ScrubberCore(object):
         # if more than one processor is used, then use 4 as many for writing (low load)
         self.max_proc = self.options["general"]["values"]["max_proc"]
         nice = self.options["general"]["values"]["nice_level"]
-        self.queue_out = multiprocessing.Queue(maxsize=-1)  # self.max_proc)
+        self.queue_out = multiprocessing.Queue()
         self.options["output"]["values"]["queue"] = self.queue_out
         # self.options["output"]["values"]["queue_err"] = self.queue_err
-        self.options["output"]["values"]["workers_count"] = self.max_proc
+        self.options["output"]["values"]["num_poison_pills_needed"] = self.max_proc-1 # one for writer
         self.options["output"]["values"]["comm_pipe"] = self._pipe_remote
         self.mol_writer = MoleculeStorage(**self.options["output"]["values"])
         self.mol_writer.start()
@@ -146,22 +194,24 @@ class ScrubberCore(object):
         # geometry
         #
         if self.options["geometry"]["active"]:
-            # queue in is the source of molecules to process
-            self.queue_in = multiprocessing.JoinableQueue(self.max_proc)
-            self._target_queue = self.queue_in
-            self.options["geometry"]["values"]["queue_in"] = self.queue_in
-            self.options["geometry"]["values"]["queue_out"] = self.queue_out
-            self.options["geometry"]["values"]["queue_err"] = self.queue_err
-            self.options["geometry"]["values"]["nice_level"] = nice
-            self.options["geometry"]["values"]["max_proc"] = self.max_proc
-            self.geometry_optimize = ParallelGeometryGenerator(
-                **self.options["geometry"]["values"]
+            g_opts = self.options["geometry"]["values"]
+            geometry_optimize = GeometryGenerator(
+                add_h=g_opts["add_h"],
+                force_trans_amide=g_opts["force_trans_amide"],
+                force_field=g_opts["force_field"],
+                max_iterations=g_opts["max_iterations"],
+                auto_iter_cycles=g_opts["auto_iter_cycles"],
+                gen3d=g_opts["gen3d"],
+                gen3d_max_attempts=g_opts["gen3d_max_attempts"],
+                fix_ring_corners=g_opts["fix_ring_corners"],
+                preserve_mol_properties=g_opts["preserve_mol_properties"],
+            
+                
             )
-            self._registered_workers.append(self.geometry_optimize)
             # TODO move the multiproc queues here?
         else:
-            self.geometry_optimize = None
-            self._target_queue = self.queue_out
+            geometry_optimize = None
+            #self._target_queue = self.queue_out
 
         ###########################
         # filters
@@ -187,10 +237,13 @@ class ScrubberCore(object):
         # isomeric transformations
         #
         if self.options["isomers"]["active"]:
-            self.isomer = MoleculeIsomers(**self.options["isomers"]["values"])
+            isomer = MoleculeIsomers(**self.options["isomers"]["values"])
         else:
-            self.isomer = None
+            isomer = None
 
+        print(self.max_proc)
+        self.queue_in = multiprocessing.JoinableQueue(self.max_proc)
+        self.molprep = MolPrep(isomer, geometry_optimize)
 
     def _check_still_alive(self):
         """check that all pending workers have terminated their job"""
@@ -235,6 +288,12 @@ class ScrubberCore(object):
         # this is required here to prevent exceptions in case of early failures
         counter = 0
         skipped = 0
+        
+        for i in range(self.max_proc - 1): # one of the processes is the writer
+            worker = MolPrepWorker(self.molprep, self.queue_in, self.queue_out)
+            worker.start()
+            self._registered_workers.append(worker)
+
         try:
             for counter, mol_org in self.mol_provider:
                 if mol_org is None:
@@ -253,24 +312,11 @@ class ScrubberCore(object):
                     mol_pool = [mol_org]
                 # isomers
                 for mol_out in mol_pool:
-                    if not self.isomer is None:
-                        isomer_report = self.isomer.process(mol_out)
-                        mol_isomers = self.isomer.mol_pool
-                    else:
-                        mol_isomers = [mol_out]
-                    for mol_raw in mol_isomers:
-                        if not self.filter_post is None:
-                            if not self.filter_post.filter(mol_raw):
-                                continue
-                        mol_raw.SetProp("Scrubber_was_here", "Yes!")
-                        self._target_queue.put(PropertyMol(mol_raw))
+                    self.queue_in.put(mol_out)
             self._send_poison_pills()
         except KeyboardInterrupt:
             print("[ Keyboard interruption requested ]")
-            if not self.geometry_optimize is None:
-                self.geometry_optimize.terminate()
-            else:
-                self._send_poison_pills()
+            self._send_poison_pills()
         # except Exception as err:
         #     print("GENERIC ERROR",err )
         #     if not self.geometry_optimize is None:
@@ -337,7 +383,7 @@ class ScrubberCore(object):
         """send poison pills to fill the output queue"""
         for i in range(self.max_proc):
             # send poison pills
-            self._target_queue.put(None)
+            self.queue_in.put(None)
         if not self.queue_err is None:
             self.queue_err.put(None)
 
@@ -359,7 +405,6 @@ class ScrubberCore(object):
                 self.__recursive_dict_match(v, curr_target[k])
             else:
                 curr_target[k] = v
-
 
 if __name__ == "__main__":
     # TODO add an option to create run an instance of this object and run it with a JSON file input?
