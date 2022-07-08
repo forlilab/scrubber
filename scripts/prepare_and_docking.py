@@ -18,7 +18,7 @@ def dock(mol):
 
 
 if __name__ == "__main__":
-    smiles = "O=C([C@H](CC1=CNC=N1)N)O histidine"
+    smiles_list =  ["O=C([C@H](CC1=CNC=N1)N)O histidine", 'CcCCcC problematic' ]
     # get and customize configuration (these should be the defaults)
 
     config = ScrubberCore.get_defaults()
@@ -28,7 +28,13 @@ if __name__ == "__main__":
     config["isomers"]["values"]["ph_datafile"] = "..//scrubber/data/test_model.txt"
     # initialize the scrubber
     scrub = ScrubberCore(config)
-    mol = Chem.MolFromSmiles(smiles)
-    for m in scrub.process(mol):
-        dock(mol)
+    for smi in smiles_list:
+        mol = Chem.MolFromSmiles(smi)
+        if not mol is None:
+            for m in scrub.process(mol):
+                dock(mol)
+    problematic = scrub.get_problematic()
+    print("Problematic molecules encountered [%d]:" % len(problematic))
+    for p in problematic:
+        print(p)
 

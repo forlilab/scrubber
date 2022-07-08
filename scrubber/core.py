@@ -118,7 +118,7 @@ class ScrubberCore(object):
         self.queue_out = multiprocessing.Queue(maxsize=-1)  # self.max_proc)
 
         ###########################
-        # initialize error logging, if requested
+        # initialize error logging, if necessary
         #
         if (self.options["errors"]["values"]["log_from_input"] is not None) or (
             self.options["errors"]["values"]["log_from_process"] is not None
@@ -228,10 +228,6 @@ class ScrubberCore(object):
 
     def process(self, mol):
         """ process a molecule and return one or more valid molecules"""
-        if not self.options["errors"]["values"]["log_from_process"] is not None:
-            self.queue_err = multiprocessing.Queue(maxsize=-1)
-        else:
-            self.queue_err = None
         if not self.isomer is None:
             isomer_report = self.isomer.process(mol)
             mol_pool = self.isomer.mol_pool
@@ -251,6 +247,16 @@ class ScrubberCore(object):
             else:
                 print("[ DEBUG> queue packet received : ", report, "]")
                 yield report['mol']
+
+    def get_problematic(self):
+        """function to retrieve problematic molecules generated using the
+        single-molecule process()"""
+        if self.queue_err is None:
+            return []
+        errors = [ x for x in self.queue_err.get()]
+        if errors[0] is None:
+            return []
+        return errors
 
     def process_file(self):
         """function where all file processing happens
