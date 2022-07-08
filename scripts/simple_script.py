@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # sys.exit()
     sc = ScrubberCore(options=config)
-    sc.process()
+    sc.process_file()
     # graph =  sc.isomer.reaction_log
     # traj = graph.trajectory
     # from pprint import pprint as pp

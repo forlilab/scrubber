@@ -14,7 +14,6 @@ from .filters import MoleculeFilter
 from .transform.isomer import MoleculeIsomers
 from .transform.reaction import Reactor
 
-
 """
 This file contains the core scrubber object
 
@@ -27,6 +26,7 @@ INSPIRATION: https://xkcd.com/1343/
 
 """
 
+# print("TRACER")
 
 class ScrubberCore(object):
     """read input files, manipulate them to perform the following operations:
@@ -109,6 +109,14 @@ class ScrubberCore(object):
         self._registered_workers = []
         # initialize pipes for multiprocessing communication
         self._pipe_listener, self._pipe_remote = multiprocessing.Pipe(False)
+        # queue out is where processed molecules are sent
+        self.max_proc = self.options["general"]["values"]["max_proc"]
+        nice = self.options["general"]["values"]["nice_level"]
+
+        # queue that receives the final products of the pipeline
+        # if the geometry optimization is not active, it serves also as self._target_queue
+        self.queue_out = multiprocessing.Queue(maxsize=-1)  # self.max_proc)
+
         ###########################
         # initialize error logging, if requested
         #
@@ -125,23 +133,19 @@ class ScrubberCore(object):
             self.queue_err = None
             self.mol_issues = None
         ###########################
-        # initialize molecular provider and molecular storage
+        # initialize molecular provider and molecular storage, if files are defined
         #
-        self.options["input"]["values"]["queue_err"] = self.queue_err
-        self.options["input"]["values"]["pipe_comm"] = self._pipe_remote
-        self.mol_provider = MoleculeProvider(**self.options["input"]["values"])
-        # queue out is where processed molecules are sent
-        # if more than one processor is used, then use 4 as many for writing (low load)
-        self.max_proc = self.options["general"]["values"]["max_proc"]
-        nice = self.options["general"]["values"]["nice_level"]
-        self.queue_out = multiprocessing.Queue(maxsize=-1)  # self.max_proc)
-        self.options["output"]["values"]["queue"] = self.queue_out
-        # self.options["output"]["values"]["queue_err"] = self.queue_err
-        self.options["output"]["values"]["workers_count"] = self.max_proc
-        self.options["output"]["values"]["comm_pipe"] = self._pipe_remote
-        self.mol_writer = MoleculeStorage(**self.options["output"]["values"])
-        self.mol_writer.start()
-        self._registered_workers.append(self.mol_writer)
+        if not self.options['input']['values']['fname'] is None:
+            self.options["input"]["values"]["queue_err"] = self.queue_err
+            self.options["input"]["values"]["pipe_comm"] = self._pipe_remote
+            self.mol_provider = MoleculeProvider(**self.options["input"]["values"])
+        if not self.options['output']['values']['fname'] is None:
+            self.options["output"]["values"]["queue"] = self.queue_out
+            self.options["output"]["values"]["workers_count"] = self.max_proc
+            self.options["output"]["values"]["comm_pipe"] = self._pipe_remote
+            self.mol_writer = MoleculeStorage(**self.options["output"]["values"])
+            self.mol_writer.start()
+            self._registered_workers.append(self.mol_writer)
         ###########################
         # geometry
         #
@@ -151,6 +155,7 @@ class ScrubberCore(object):
             self._target_queue = self.queue_in
             self.options["geometry"]["values"]["queue_in"] = self.queue_in
             self.options["geometry"]["values"]["queue_out"] = self.queue_out
+            # HIC SUNT LEONES
             self.options["geometry"]["values"]["queue_err"] = self.queue_err
             self.options["geometry"]["values"]["nice_level"] = nice
             self.options["geometry"]["values"]["max_proc"] = self.max_proc
@@ -221,8 +226,34 @@ class ScrubberCore(object):
             self.options["geometry"]["values"][x] for x in ["gen3d", "fix_ring_corners"]
         )
 
-    def process(self):
-        """function where all processing happens
+    def process(self, mol):
+        """ process a molecule and return one or more valid molecules"""
+        if not self.options["errors"]["values"]["log_from_process"] is not None:
+            self.queue_err = multiprocessing.Queue(maxsize=-1)
+        else:
+            self.queue_err = None
+        if not self.isomer is None:
+            isomer_report = self.isomer.process(mol)
+            mol_pool = self.isomer.mol_pool
+        else:
+            mol_pool = [mol]
+        for mol_raw in mol_pool:
+            mol_raw.SetProp("Scrubber_was_here", "Yes!")
+            self._target_queue.put(PropertyMol(mol_raw))
+        self._send_poison_pills()
+        self.workers_count = self.max_proc
+        while True:
+            report = self.queue_out.get()
+            if report is None:
+                self.workers_count -= 1
+                if self.workers_count == 0:
+                    return
+            else:
+                print("[ DEBUG> queue packet received : ", report, "]")
+                yield report['mol']
+
+    def process_file(self):
+        """function where all file processing happens
         ideas:
 
             - pre-processing queue to parallelize: filtering, reactions,

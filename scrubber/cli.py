@@ -67,7 +67,6 @@ This is where the full pipeline is described (scrubber.core.process())
 from pprint import pprint as pp
 
 isomer_default = MoleculeIsomers.get_defaults()
-pp(isomer_default)
 molprovider_default = MoleculeProvider.get_defaults()
 molstorage_default = MoleculeStorage.get_defaults()
 molerror_default = MoleculeIssueStorage.get_defaults()

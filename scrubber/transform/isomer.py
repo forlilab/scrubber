@@ -9,6 +9,7 @@ from rdkit.Chem.EnumerateStereoisomers import (
 )
 
 from ..common import ScrubberBase, UniqueMoleculeContainer, mol2smi
+
 # from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
 
 
@@ -46,7 +47,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         proto_max_results: int = 50,
         proto_keep_all: bool = False,
         proto_max_net_charge: int = 5,
-        proto_neutralize_only:bool = False,
+        proto_neutralize_only: bool = False,
         ## TAUTOMERS
         tauto_enum: bool = True,
         tauto_max_results: int = 50000,
@@ -110,10 +111,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         # elif isinstance(self.proto_pH, list):
         #     self.proto_pH = [self.proto_pH[0], self.proto_pH[1]]
 
-
-    def __init_data(
-        self, ph_datafile: str = None, tauto_datafile: str = None
-    ) -> None:
+    def __init_data(self, ph_datafile: str = None, tauto_datafile: str = None) -> None:
         """initialize data files for transformations"""
         self.__init_tautomers(tauto_datafile)
         self.__init_protomers(ph_datafile)
@@ -213,9 +211,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
                     (False, self._iterations, "proto/tauto loop interrupted")
                 )
                 break
-            if (not self.proto_enum) or (
-                not self.tauto_enum
-            ):
+            if (not self.proto_enum) or (not self.tauto_enum):
                 if self.verbose:
                     print("[VERBOSE] either tautomers or protomers are not requested")
                 break
@@ -294,11 +290,11 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
 
     def enumerate_protomers(
         self,
-        pH: float = 7.4, # range, too?
+        pH: float = 7.4,  # range, too?
         max_results: int = 50,
         keep_all: bool = False,
         max_net_charge: int = None,
-        neutralize:bool=False,
+        neutralize: bool = False,
     ) -> bool:
         """enumerate protomer species for the molecule(s) present in the
         molecules pool (self.mol_pool) at the input pH.  If the process does
@@ -485,9 +481,11 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
 
     def _neutralize_atoms(self, mol):
         """Neutralie charged molecules by atom
-         source: http://www.rdkit.org/docs/Cookbook.html#neutralizing-molecules
+        source: http://www.rdkit.org/docs/Cookbook.html#neutralizing-molecules
         """
-        pattern = Chem.MolFromSmarts("[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]")
+        pattern = Chem.MolFromSmarts(
+            "[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]"
+        )
         at_matches = mol.GetSubstructMatches(pattern)
         at_matches_list = [y[0] for y in at_matches]
         if len(at_matches_list) > 0:
@@ -501,17 +499,16 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         return mol
 
     def _set_scrubber_property(self, mol, property_name):
-        """ update scrubber incremental value properties, e.g.:
-            stereoisomer/tautomer count, etc. """
+        """update scrubber incremental value properties, e.g.:
+        stereoisomer/tautomer count, etc."""
         if not mol.HasProp(property_name):
             mol.SetIntProp(property_name, 0)
             current = 0
         else:
             current = mol.GetIntProp(property_name)
-        current+=1
+        current += 1
         # print("UPDATING CRRENT!", current, property_name)
         mol.SetIntProp(property_name, current)
-
 
 
 if __name__ == "__main__":
