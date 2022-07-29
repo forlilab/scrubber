@@ -147,7 +147,6 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         mol,
     ) -> list:
         """apply all transformations"""
-        # print("WORKING ON", mol2smi(mol))
         success_record = []
         self.reaction_log = MolecularReactionsLogger(self.verbose)
         self.mol_pool = UniqueMoleculeContainer([mol])
@@ -237,7 +236,6 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
                 )
         if self.add_hydrogens:
             # add back hydrogens here
-            # print("Adding hydrogens...")
             for old_mol in self.mol_pool:
                 new_mol = Chem.AddHs(old_mol)
                 self.mol_pool.add(new_mol, replace=True)
@@ -255,7 +253,6 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         # TODO add random enumeration
         unassigned_only = True
         if mode == "all":
-            # print("ALL MODE!", a)
             unassigned_only = False
         opts = StereoEnumerationOptions(
             unique=True,
@@ -368,8 +365,8 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
                     if abs(Chem.GetFormalCharge(m)) > max_net_charge:
                         remove.append(m)
                 self._discarded.update(remove)
-                for r in remove:
-                    print(">>DISCARDED:", mol2smi(r))
+                # for r in remove:
+                #     print(">>DISCARDED:", mol2smi(r))
                 results.remove_mols(remove)
             if self.verbose:
                 print(

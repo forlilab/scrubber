@@ -62,7 +62,6 @@ class GeometryGenerator(ScrubberBase):
         if _stop_at_defaults:
             return
         # this flag is used to control if at any time the minimization has been asked to stop
-        self._handbrake = False
         if not self.force_field in self.FORCE_FIELD_LIST:
             msg = "*** ERROR *** invalid force field type |%s|, allowed: %s" % (
                 force_field,
@@ -92,9 +91,6 @@ class GeometryGenerator(ScrubberBase):
         mol_input,
     ):
         """process the molecule"""
-        # print("MOLSS", mol_input)
-        # print("MOLSS", mol_input.GetProp("Scrubber_was_here"))
-        # print("MOLINPUT", mol_input.GetProp("_Name"))
         # add hydrogens if necessary
         if self.opt_add_h:
             mol = Chem.AddHs(mol_input)
@@ -103,17 +99,17 @@ class GeometryGenerator(ScrubberBase):
             mol = Chem.Mol(mol_input)
         report = {
             "state": None,
-            "cycles": 0,
+            "iter_cycles": 0,
             "mol": mol,
             "iterations": self.ff_parms["maxIters"],
-            "accepted": 1,  # 1: full, 0: partial, -1: rejected
+            "accepted": 1,  # 1:full, 0:partial, -1:rejected
         }
         # run the cycle once (better than try/except?)
         while True:
-            if self._handbrake:
-                report["state"] = "interrupted (handbrake)"
-                report["accepted"] = -1
-                break
+            # if self._handbrake:
+            #     report["state"] = "interrupted (handbrake)"
+            #     report["accepted"] = -1
+            #     break
             try:
                 # generate 3D coordinates if requested
                 if not self.gen3d_engine is None:
@@ -121,7 +117,6 @@ class GeometryGenerator(ScrubberBase):
                     try:
                         rdDistGeom.EmbedMolecule(
                             mol, self.gen3d_engine)
-                        # , maxAttempts=self.gen3d_max_attempts)
                         # TODO this is raising an error in RDKit, figure out
                         # TODO check if disabled in the code?
                     except Exception as err:
@@ -136,7 +131,7 @@ class GeometryGenerator(ScrubberBase):
                 if self.opt_force_trans_amide:
                     self._fix_amide(mol)
                 for steps in range(self.auto_iter_cycles):
-                    report["cycles"] += 1
+                    report["iter_cycles"] += 1
                     # try:
                     if True:
                         out = self.ff_optimize(mol, **self.ff_parms)
@@ -162,10 +157,8 @@ class GeometryGenerator(ScrubberBase):
                 report["state"] =  err.__str__()  #"ff_fail"
                 report["accepted"] = -1
                 break
-
             # return report
             break
-        # print("RETURN", report, report['mol'].GetPropsAsDict())
         report["mol"] = PropertyMol(report["mol"])
         return report
 
@@ -201,6 +194,7 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
         queue_err: multiprocessing.Queue=None,
         nice_level: int = None,
         strict: bool = False,
+        handbrake: multiprocessing.Event=None,
         # geom_opts: dict = GeometryGenerator.get_defaults(),
         add_h: bool = geom_default["add_h"],
         force_trans_amide: bool = geom_default["force_trans_amide"],
@@ -236,6 +230,7 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
         self.queue_out = queue_out
         self.queue_err = queue_err
         self.strict = strict
+        self.handbrake = handbrake
         if self.strict:
             self._success_cutoff = 0
         else:
@@ -245,32 +240,35 @@ class GeometryGeneratorMPWorker(multiprocessing.Process, GeometryGenerator):
         """overload of multiprocessing run method"""
         while True:
             try:
-                if self._handbrake:
-                    print("trying to exit gracefully...")
+                if self.handbrake.is_set():
+                    # print("WORKER__NAME: trying to exit gracefully...")
+                    self.queue_out.put(None, block=True)
+                    break
                 mol = self.queue_in.get()
-                if mol is None or self._handbrake:
-                    # print("GEOM RECEIVED POISON PILL")
-                    self.queue_out.put(None)
+                if mol is None: # or self.handbrake.is_set():
+                    # print("FOUND POISON PILL INGEOMETRY")
+                    self.queue_out.put(None, block=True)
                     break
                 # print("MOL", mol.GetPropsAsDict())
                 report = self.process(mol)
-                if report["accepted"] >= self._success_cutoff:
+                if report["accepted"] > self._success_cutoff:
                     # report["name"] = mol_name
-                    self.queue_out.put(report)
+                    self.queue_out.put(report, block=True)
                 else:
                     if self.queue_err is None:
                         continue
-                    print("REPORTING THIS MOLECULE:", report)
-                    self.queue_err.put( ("geom", report['mol']) )
+                    self.queue_err.put( ("geom_" + report['state'], report['mol']), block=True)
+                            # , report['mol'].GetProp("_Name")) )
                 # except:
                 #     print("PROBLEMATIC MOLECULE captured...")
                 #     continue
             except KeyboardInterrupt:
-                print("[geom] Caught Ctrl-C...")
+                # print("[geom] Caught Ctrl-C...")
+                self.queue_out.put(None, block=True)
                 return
         return
 
-class ParallelGeometryGenerator(object):
+class ParallelGeometryGenerator():
     """Parallelized (multiprocessing) 3D geometry builder
     instanciate multiple workers and connect them with the in/out queues
 
@@ -283,7 +281,6 @@ class ParallelGeometryGenerator(object):
                       only converged molecules are accepted, otherwise any minimized
                       molecule is accepted
     """
-
 
     def __init__(
         self,
@@ -302,6 +299,7 @@ class ParallelGeometryGenerator(object):
         preserve_mol_properties: bool = geom_default["preserve_mol_properties"],
         max_proc: int = None,
         nice_level: int = None,
+        handbrake: multiprocessing.Event = None,
         strict: bool = False,
         _stop_at_defaults=False,
     ):
@@ -320,12 +318,13 @@ class ParallelGeometryGenerator(object):
         self.max_proc = max_proc
         self.nice_level = nice_level
         self.strict = strict
+        self.handbrake = handbrake
         if _stop_at_defaults:
             return
-        # print("=============================")
+        # print("============================= PARELL GEOM")
         # print("self.queue_in", self.queue_in)
         # print("self.queue_out", self.queue_out)
-        # print("self.geom_opts", self.geom_opts)
+        # # print("self.geom_opts", self.geom_opts)
         # print("self.max_proc ", self.max_proc)
         # print("self.nice_level", self.nice_level)
         # print("self.strict", self.strict)
@@ -365,10 +364,18 @@ class ParallelGeometryGenerator(object):
                 gen3d_max_attempts = self.gen3d_max_attempts,
                 fix_ring_corners = self.fix_ring_corners,
                 preserve_mol_properties = self.preserve_mol_properties,
+                handbrake = self.handbrake,
             )
             self.__workers.append(w)
+            # w.daemon = True
             w.start()
         print("[ %d geometry workers initialized ]" % len(self.__workers))
+
+    def join(self):
+        """function to wrap the join functions of the workers """
+        for w in self.__workers:
+            # print("ParallelGeometryGenerator> sub-join:", w)
+            w.join()
 
     @classmethod
     def get_defaults(cls):
@@ -376,12 +383,13 @@ class ParallelGeometryGenerator(object):
         return cls(_stop_at_defaults=True).__dict__
 
     def is_alive(self):
-        """function to implement a similar behavior of multiprocessing is_alive() method; return true if at least one of the workers initialized is still alive"""
+        """function to implement a similar behavior of multiprocessing
+        is_alive() method; return true if at least one of the workers
+        initialized is still alive"""
         for w in self.__workers:
             if w.is_alive():
                 return True
         return False
-
 
     def halt_workers(self):
         """function to stop all pending calculations"""
@@ -391,7 +399,22 @@ class ParallelGeometryGenerator(object):
     def terminate(self):
         """multiprocessing method override"""
         # ask all processes to terminate gracefully
+        for i in range(self.max_proc):
+            print("GEOW: PILLL IN PARALLEL")
+            self.queue_in.put(None, block=True)
+        self.queue_in.close()
+
         for idx, w in enumerate(self.__workers):
+            print("GEOW: Terminating idx", w)
+            print("GEOW: Is alive?", w.is_alive())
+            # print("DIR WORKERS", dir(w))
             w.terminate()
-        for i in range(self._queue_size):
-            self.queue_out.put(None)
+            print("GEOW: Is alive?", w.is_alive())
+            w.join()
+            print("GEOW: Is alive?", w.is_alive())
+            # w.terminate()
+            # w.kill()
+            # w.close()
+            # print("NOW->", w)
+        # for i in range(self._queue_size):
+        #     self.queue_out.put(None)

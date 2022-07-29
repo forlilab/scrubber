@@ -9,7 +9,7 @@ from pprint import pprint as pp
 
 sys.path.append("../")
 try:
-    from scrubber.core import ScrubberCore
+    from scrubber.core import ScrubberCore, MoleculeIssueStorage
 except Exception as e:
     print("The script must be executed from the script/ directory")
     raise e
@@ -24,8 +24,6 @@ from scrubber.cli import (
     tags_reverse,
     extra_options,
 )
-
-# from scrubber.core import ScrubberCore, ScrubberClass
 
 
 class SmartFormatter(argparse.HelpFormatter):
@@ -50,7 +48,7 @@ class SmartFormatter(argparse.HelpFormatter):
         return argparse.HelpFormatter._split_lines(self, text, width)
 
 
-class ScrubbCLI(object):
+class ScrubberCLI:
     """This class creates the working instance of the CLI interface of the Scrubber.
     The functions performed are:
         - generate CLI options for all options 'published' by the ScrubberCore
@@ -64,12 +62,14 @@ class ScrubbCLI(object):
     def __init__(self):
         """something"""
         self.options = ScrubberCore.get_defaults()
+        self.init_opt_parser()
+        self.quiet = False
 
     def init_opt_parser(self):
         """initialize the parser"""
         self.parser = argparse.ArgumentParser(
             description=description,
-            usage=usage,
+            # usage=usage,
             epilog=epilog,
             # formatter_class=argparse.RawDescriptionHelpFormatter,
             # formatter_class=SmartFormatter,
@@ -81,7 +81,7 @@ class ScrubbCLI(object):
             group = self.parser.add_argument_group(group_name.upper(), desc)
             options = cli_options[group_name]["values"]
             # TODO add a line to check if active or not?
-            for name, opt in values.items():
+            for name, _ in values.items():
                 if name in ignore:
                     continue
                 tag = tags[group_name]
@@ -112,15 +112,15 @@ class ScrubbCLI(object):
         early termination of the processing (--help_advanced and
         --save_config_template)"""
         self.args = self.parser.parse_args()
-        cli_options = {}
-        file_options = {}
+        cli_opts = {}
+        file_opts = {}
         extra_actions = {
             "config_file": None,
             "save_config_template": None,
             "help_advanced": None,
         }
-        print("XXXX INTERESTING TERST")
-        pp(vars(self.args))
+        # print("XXXX INTERESTING TERST")
+        # print(vars(self.args))
         for (
             opt,
             value,
@@ -130,21 +130,23 @@ class ScrubbCLI(object):
                 extra_actions[opt] = value
             # process standard options
             else:
-                tag, kw = opt.split("_", 1)
-                if tag in tags_reverse:
-                    group = tags_reverse[tag]
-                    # opt is still original
-                else:
-                    group = "general"
-                    opt = kw
-                if not group in cli_options:
-                    cli_options[group] = {}
-                cli_options[group][opt] = value
+                group = "general"
+                if "_" in opt:
+                    tag, kw = opt.split("_", 1)
+                    if tag in tags_reverse:
+                        group = tags_reverse[tag]
+                        opt = kw
+                if not group in cli_opts:
+                    cli_opts[group] = {}
+                cli_opts[group][opt] = value
+                if opt == "quiet":
+                    self.quiet = value
+
         # check that no more than one special option is used at the same time
-        print("EXTRA", extra_actions)
-        check = sum( [ int(v is not None) for _, v in extra_actions.items()] )
-        print("CHECK", check)
-        if  check  > 1:
+        # print("CLIOPTS", cli_options)
+        check = sum([int(v is not None) for v in extra_actions.values()])
+        # print("CHECK", check)
+        if check > 1:
             print(
                 "*** ERROR *** conflicting options used. "
                 "Use one of either --config_file, "
@@ -167,13 +169,16 @@ class ScrubbCLI(object):
                 )
                 sys.exit(1)
             try:
-            # if True:
                 with open(fname, "w") as fp:
+                    # remove the "values"  field
+                    data = ScrubberCore.get_defaults(terse=True)
+                    for k, v in data.items():
+                        data[k] = v["values"]
                     json.dump(ScrubberCore.get_defaults(terse=True), fp, indent=4)
             except Exception as e:
                 print(
                     "*** ERROR *** impossible to write the "
-                    "file [%s]. Error message: %s" % (fname, e.__str__())
+                    "file [%s]. Error message: %s" % (fname, str(e))
                 )
                 sys.exit(1)
             sys.exit(0)
@@ -183,52 +188,109 @@ class ScrubbCLI(object):
             print("FNAME IS", fname)
             try:
                 with open(fname, "r") as fp:
-                    options = json.load(fp)
+                    file_opts = json.load(fp)
+                # restore the "values" field
+                for k, v in file_opts.items():
+                    file_opts[k] = {"values": v}
             except Exception as e:
                 print(
                     "*** ERROR *** impossible to read the "
-                    "file [%s]. Error message: %s" % (fname, e.__str__())
+                    "file [%s]. Error message: %s" % (fname, str(e))
                 )
                 sys.exit(1)
         # set file options first
-        for group, values in file_options.items():
+        for group, opts in file_opts.items():
             if not group in self.options:
+                print("*** ERROR *** unknown option type in the file: [%s]" % group)
+                sys.exit(1)
+            for key, value in opts["values"].items():
+                if not key in self.options[group]["values"]:
+                    print("*** ERROR *** unknown option in the file: [%s]" % key)
+                    sys.exit(1)
+                    print("setting option,", group, key, value)
+                self.options[group]["values"][key] = value
+        # set CLI options after files
+        # strip the CLI tag to extract the kw, e.g.:
+        # --in_fname -> "in_fname" -> ("in_" in tags_reverse): True -> kw = "fname"
+        # --max_proc -> "max_proc" -> ["max_" in tags_reverse): False - > kw = "max_proc"]
+        for group, values in cli_opts.items():
+            for opt, v in values.items():
+                # print("RAW:", opt, v)
+                if "_" in opt:
+                    tag, kw = opt.split("_", 1)
+                    if tag in tags_reverse:
+                        opt = kw
+                self.options[group]["values"][opt] = v
+        # after parsing  both CLI and config file options, check that required
+        # options are defined:
+        # -fname (input)
+        # -fname (output)
+        missing_options = []
+        if self.options["input"]["values"]["fname"] is None:
+            missing_options.append("--%s%s" % (tags["input"], "fname"))
+        if self.options["output"]["values"]["fname"] is None:
+            missing_options.append("--%s%s" % (tags["output"], "fname"))
+        if len(missing_options) > 0:
+            if extra_actions["config_file"] is None:
                 print(
-                        "*** ERROR *** unknown option type in the file: [%s]" % group
+                    "ERROR: required options are missing: %s"
+                    % (", ".join(missing_options))
                 )
                 sys.exit(1)
-            for opt, v in values.items():
-                if not opt in self.options[group]['values']:
-                    print(
-                            "*** ERROR *** unknown option in the file: [%s]" % opt
-                    )
-                    sys.exit(1)
-                self.options[group]["values"][opt] = v
-        # no other CLI options are allowed if --config_file is used
-        if len(sys.argv)>3:
-            print(
-                    "*** ERROR *** \"--config_file\" option cannot be used with other command-line options"
-            )
-            sys.exit(1)
+            else:
+                print(
+                    "ERROR: input and/or output files are not specified; "
+                    "either add them to the config file or set them "
+                    "using the following options: %s" % (", ".join(missing_options))
+                )
+                sys.exit(1)
+        # check that files do not exist already
+        if os.path.exists(self.options["output"]["values"]["fname"]):
+            if not cli_opts["general"]["overwrite"]:
+                print(
+                    "ERROR: the output file [ %s ] exists. Specify a different "
+                    "filename or use the '--overwrite' option"
+                    % (self.options["output"]["values"]["fname"])
+                )
+                sys.exit(1)
+        found = []
+        if not cli_opts["general"]["overwrite"]:
+            for f in MoleculeIssueStorage.generate_filenames(
+                    self.options["errors"]["values"]["log_basename"]
+                    ):
+                if os.path.exists(f):
+                    found.append(f)
+            if len(found):
+                print(
+                    "ERROR: the following log files already exist. Specify a different "
+                    "basename (--err_log_basename) or use the '--overwrite' option:\n%s"
+                    % ("\n".join(found)))
+                sys.exit(1)
 
-        # # set CLI options after files
-        # for group, values in cli_options.items():
-        #     for opt, v in values.items():
-        #         if group in file_options:
-        #             if
-        #         self.options[group]["values"][opt] = v
-        # print("XXXXX")# return cli_options, file_options
+        self.core = ScrubberCore(self.options)
+
+    def start(self):
+        """start processing the files specified in the CLI options"""
+        self.core.process_file(self.quiet)
+        # if self.options['quiet']:
+        #     print("QUIET")
+        #     return
+        # print(self.core.queue_err.close())
 
     def show_advanced_help(self):
         """show advanced help and exit"""
         print(advanced_help)
+
         sys.exit(0)
 
 
 if __name__ == "__main__":
     from pprint import pprint as pp
-    ss = ScrubbCLI()
-    ss.init_opt_parser()
-    ss.process_args()
-    print("=======")
+
+    scrub = ScrubberCLI()
+    # scrub.core.process_file()
+    scrub.start()
+
+    # # ss.process_args()
+    # print("=======")
     # pp(ss.options)

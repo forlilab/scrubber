@@ -15,10 +15,10 @@ DATA_PATH = os.path.join(os.path.dirname(__file__), DATA_DIR)
 
 # an rdkit mol instance is this: Chem.rdchem.Mol
 
-__all__ = ["DATA_PATH", "ScrubberClass", "UniqueMoleculeContainer"]
+__all__ = ["DATA_PATH", "ScrubberBase", "UniqueMoleculeContainer"]
 
 
-class ScrubberBase(object):
+class ScrubberBase():
     """abstract class with the basic functionality that most (all?) Scrubber
     classes should have.
     A class method provide access to the class init defaults by returning the
@@ -37,7 +37,7 @@ class ScrubberBase(object):
     >>> scrubber_class_options['key'] = False
     >>> sc = ScrubberClassNew(**scrubber_class_options)
     """
-    def __init__(self, arguments, _stop_at_defaults: bool = False):
+    def __init__(self, arguments=None, _stop_at_defaults: bool = False):
         """generic implementation of the init;
         inheriting classes will implement their own args, but keep the
         __stop_at_defaults flag to support the get_defaults() class method and
@@ -46,8 +46,9 @@ class ScrubberBase(object):
         This method will create a disposable instance from which the defaults
         will be extractedcore.
         """
-        print("GOT HERE, TOO")
-        if __stop_at_defaults:
+        # print("GOT HERE, TOO")
+        self.options = {}
+        if _stop_at_defaults:
             return
 
     @classmethod
@@ -74,7 +75,7 @@ class ScrubberBase(object):
         self.options = self.__dict__.copy()
 
 
-class UniqueMoleculeContainer(object):
+class UniqueMoleculeContainer():
     """Class to store RDKit molecules without duplicates. Isomeric
     canonical SMILES are used as unique keys, unless chirality is disabled when
     the class is initialized.

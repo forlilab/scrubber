@@ -16,7 +16,11 @@ PAINS_FILES = {
 
 
 class MoleculeFilter(ScrubberBase):
-    """class to filtermolecules basing on requested properties"""
+    """class to filtermolecules basing on requested properties
+
+        >>> from rdkit.Chem import rdMolDescriptors
+        >>> list(rdMolDescriptors.Properties.GetAvailableProperties())
+    """
 
     def __init__(
         self,
@@ -24,6 +28,7 @@ class MoleculeFilter(ScrubberBase):
         mw_min: int = 0,
         num_at_min: int = 0,
         num_at_max: int = 999,
+
         smarts_wanted: list = [],
         smarts_not_wanted: list = [],
         pains_family: str = "all",
@@ -39,17 +44,18 @@ class MoleculeFilter(ScrubberBase):
         self.pains_family = pains_family
         if _stop_at_defaults:
             return
-
-        # self.__build_opts_dict()
-        self.__init_pains()
-        self.__init_smarts()
+        self._init_pains()
+        self._init_smarts()
 
     def process(self, mol):
         """apply filters"""
-        # this is a class function with 0 indentation
+        if not self.mw_min > Chem.Descriptors.ExactMolWt(mol) < self.mw_max:
+            return False
+        if not self.num_at_min > mol.GetNumHeavyAtoms() < self.num_at_max:
+            return False
         return True
 
-    def __init_pains(self):
+    def _init_pains(self):
         """initialize the PAINS filters"""
         # this is a class function with 0 indentation
         self._pains_filters = {}
