@@ -337,7 +337,7 @@ class MoleculeTransformations(object):
                     rxn_obj, rxn_left, rxn_right, tag = self._parse_reaction_line(line)
                     reactions.append((rxn_obj, rxn_left, rxn_right, tag))
                 # TODO convert to reaction failure exception
-                except:
+                except Exception as exc:
                     msg = "ERROR: invalid reaction definition at line [%d]:\n%s" % (
                         idx,
                         line,

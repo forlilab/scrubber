@@ -5,15 +5,8 @@ import os
 
 
 # DEBUG
-from pprint import pprint as pp
+from scrubber.core import ScrubberCore, MoleculeIssueStorage
 
-sys.path.append("../")
-try:
-    from scrubber.core import ScrubberCore, MoleculeIssueStorage
-except Exception as e:
-    print("The script must be executed from the script/ directory")
-    raise e
-# import cli
 from scrubber.cli import (
     description,
     usage,
@@ -285,12 +278,5 @@ class ScrubberCLI:
 
 
 if __name__ == "__main__":
-    from pprint import pprint as pp
-
     scrub = ScrubberCLI()
-    # scrub.core.process_file()
     scrub.start()
-
-    # # ss.process_args()
-    # print("=======")
-    # pp(ss.options)

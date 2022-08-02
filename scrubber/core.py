@@ -1,5 +1,10 @@
 import multiprocessing
 
+
+# IMPORTANT RESOURCES, INVESTIGATE
+# https://sefiks.com/2021/07/05/handling-hang-in-python-multiprocessing/
+# https://pythonspeed.com/articles/python-multiprocessing/ (alterantive to fork() )
+
 # from time import sleep
 # import sys
 import random
@@ -13,41 +18,25 @@ from .storage import (
     MoleculeIssueStorage,
 )
 from .geom.geometry import ParallelGeometryGenerator, GeometryGenerator
-from .filters import MoleculeFilter
 from .transform.isomer import MoleculeIsomers
-from .transform.reaction import Reactor
 
 """
 This file contains the core scrubber object
-
-
-# TODO add a dump for json format
-    - dump all defaults
-    - dump active only (stuff that's been modified)
-
 INSPIRATION: https://xkcd.com/1343/
-
 """
-
 
 class ScrubberCore(object):
     """read input files, manipulate them to perform the following operations:
 
         - read input files
             - convert from OB?
-        - apply filters
-            - generic SMARTS wanted/unwanted
-            - PAINS
-            - mw, logP, others...? (which can be used to apply a series of controversial filters, like Lipinski)
         - elaborate structures ( * EXTERNAL * )
-            - tautomers, protomers, chiral centers ( chem modofications/warheads? )
+            - tautomers, protomers, chiral centers
         - pass molecules to 3D processors ( * EXTERNAL * )
         - write the results
 
     for mol in input_lib:
         for mol_n in transform(mol):
-            if not filter(mol_n):
-                continue
             gen_3d(mol_n)
             write(mol_n)
     """
@@ -60,21 +49,6 @@ class ScrubberCore(object):
         "output": {
             "values": MoleculeStorage.get_defaults(),
             "ignore": ["queue", "comm_pipe", "workers_count", "handbrake"],
-        },
-        "filter_pre": {
-            "active": False,
-            "values": MoleculeFilter.get_defaults(),
-            "ignore": [],
-        },
-        "filter_post": {
-            "active": False,
-            "values": MoleculeFilter.get_defaults(),
-            "ignore": [],
-        },
-        "reaction": {
-            "active": False,
-            "values": Reactor.get_defaults(),
-            "ignore": [],
         },
         "isomers": {
             "active": True,
@@ -108,10 +82,7 @@ class ScrubberCore(object):
                 "handbrake",
             ],
         },
-        # -- CALC PROPERTIES
-        # calc_properties : {}
         # -- REMOVE SALTS
-        #  "clean" : {}
     }
 
     def __init__(self, options: dict = None):
@@ -204,31 +175,9 @@ class ScrubberCore(object):
             self.geometry_optimize = ParallelGeometryGenerator(
                 **self.options["geometry"]["values"]
             )
-            # self._registered_workers.append(self.geometry_optimize)
-            # TODO move the multiproc queues here?
         else:
             self.geometry_optimize = None
             self._target_queue = self.queue_out
-
-        ###########################
-        # filters
-        #
-        if self.options["filter_pre"]["active"]:
-            self.filter_pre = MoleculeFilter(**self.options["filter_pre"]["values"])
-        else:
-            self.filter_pre = None
-        if self.options["filter_post"]["active"]:
-            self.filter_post = MoleculeFilter(**self.options["filter_post"]["values"])
-        else:
-            self.filter_post = None
-
-        ###########################
-        # reactions
-        #
-        if self.options["reaction"]["active"]:
-            self.reactor = Reactor(**self.options["reaction"]["values"])
-        else:
-            self.reactor = None
 
         ###########################
         # isomeric transformations
@@ -374,15 +323,9 @@ class ScrubberCore(object):
     def process_file(self, quiet=False):
         """function where all file processing happens
         ideas:
-
-            - pre-processing queue to parallelize: filtering, reactions,
               isomers? ( 1 core )
             - out queue: writer?
-
-        TODO: explore the possibility of writing a file with all the generated
-        proto/stereo/tautomers/reactions??
         """
-        # TODO check if file specified?
         if self.max_proc > 1:
             self._initialize_mp_pipeline()
         else:
@@ -398,7 +341,7 @@ class ScrubberCore(object):
         mol_sec = -1
         mol_step = 10
         try:
-            for counter, mol_org in self.mol_provider:
+            for counter, mol in self.mol_provider:
                 if counter % mol_step == 0:
                     mol_sec = mol_step / (time.time() - t_start)
                     t_start = time.time()
@@ -406,7 +349,7 @@ class ScrubberCore(object):
                     timing = "( %2.3f mol/sec.)" % mol_sec
                 else:
                     timing = ""
-                if mol_org is None:
+                if mol is None:
                     skipped += 1
                     continue
                 if not quiet:
@@ -418,28 +361,14 @@ class ScrubberCore(object):
                         % (bars, counter, timing),
                         end="",
                     )
-                # prefilter
-                if not self.filter_pre is None:
-                    if not self.filter_pre.filter(mol_org):
-                        continue
-                # chemical modifications/transformations
-                if not self.reactor is None:
-                    mol_pool = self.reactor.react(mol_org)
+                if not self.isomer is None:
+                    self.isomer.process(mol)
+                    mol_isomers = self.isomer.mol_pool
                 else:
-                    mol_pool = [mol_org]
-                # isomers
-                for mol_out in mol_pool:
-                    if not self.isomer is None:
-                        _ = self.isomer.process(mol_out)
-                        mol_isomers = self.isomer.mol_pool
-                    else:
-                        mol_isomers = [mol_out]
-                    for mol_raw in mol_isomers:
-                        if not self.filter_post is None:
-                            if not self.filter_post.filter(mol_raw):
-                                continue
-                        mol_raw.SetProp("Scrubber_was_here", "Yes!")
-                        self._target_queue.put(PropertyMol(mol_raw), block=True)
+                    mol_isomers = [mol_out]
+                for mol_raw in mol_isomers:
+                    mol_raw.SetProp("Scrubber_was_here", "Yes!")
+                    self._target_queue.put(PropertyMol(mol_raw), block=True)
             print(
                 "\r ----- COMPLETED -----                                                         "
             )
@@ -538,10 +467,7 @@ class ScrubberCore(object):
 
 
 if __name__ == "__main__":
-    # TODO add an option to create run an instance of this object and run it with a JSON file input?
     # import sys
     import json
-
     config = ScrubberCore.get_defaults()
     print("CONFIG!")
-    # pp(config)

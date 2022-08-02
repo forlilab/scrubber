@@ -10,9 +10,6 @@ from rdkit.Chem.EnumerateStereoisomers import (
 
 from ..common import ScrubberBase, UniqueMoleculeContainer, mol2smi
 
-# from scrubber.core.base import ScrubberClass, UniqueMoleculeContainer, mol2smi
-
-
 from .base import (
     MoleculeTransformations,
     MaxResultsException,
@@ -22,7 +19,6 @@ from .base import (
 
 
 # TODO add pro-chiral patterns?
-# TODO add get_process_default function?
 
 PH_DATAFILE = "phmodel.txt"
 TAUTOMERS_DATAFILE = "tautomers.txt"
@@ -95,7 +91,6 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
                     str(self.stereo_enum),
                 )
             )
-        # self._build_opts_dict()
         MoleculeTransformations.__init__(
             self,
             verbose=self.verbose,
@@ -202,9 +197,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
             self.__process_iter += 1
             if self.__process_iter > self.max_cycles:
                 if self.verbose:
-                    print(
-                        "[VERBOSE] Seal not broken, no more things to do"
-                    )  # , self._iter)
+                    print("[VERBOSE] Seal not broken, no more things to do")
                 # TODO is this a failure? (arguably, yes)
                 success_record.append(
                     (False, self._iterations, "proto/tauto loop interrupted")

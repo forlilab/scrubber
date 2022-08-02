@@ -26,10 +26,6 @@ tags = {
     "output": "out_",
     "isomers": "iso_",
     "geometry": "geom_",
-    # "log": "log_",
-    "filter_pre": "filtpre_",
-    "filter_post": "filtpost_",
-    "reaction": "react_",
     "errors": "err_",
     "general": "",
 }
@@ -67,8 +63,6 @@ This is the advanced help
 
 This is where the full pipeline is described (scrubber.core.process())
 """
-
-# TODO make sure they all have reasonable or accurate defaults
 
 from pprint import pprint as pp
 
@@ -300,175 +294,6 @@ cli_options = {
                 "required": False,
                 "type": bool,
                 # "default": False,
-                "default": argparse.SUPPRESS,
-            },
-        },
-    },
-    "filter_pre": {
-        # TODO this needs to be updated once the classes are completed
-        "description": """Options for pre-filter settings (i.e. as soon as
-        molecules are loaded and  before any processing occurs); by defaults
-        all filters are disabled, and can be enabled by defining any filter
-        values.""",
-        "values": {
-            "--filtpre_mw_max": {
-                "help": "max mw to accept",
-                "action": "store",
-                "metavar": "MAX_MW",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_mw_min": {
-                "help": "min mw to accept",
-                "action": "store",
-                "metavar": "MIN_MW",
-                "required": False,
-                # "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_num_at_min": {
-                "help": "min num atoms to accept",
-                "action": "store",
-                "metavar": "MIN_NUM_ATOMS",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_num_at_max": {
-                "help": "max num atoms to accept",
-                "action": "store",
-                "metavar": "MAX_NUM_ATOMS",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_smarts_wanted": {
-                "help": "SMARTS pattern of wanted molecules (DEFINE A FILE HERE)",
-                "action": "store",
-                "metavar": "SMARTS_STRING",
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_smarts_not_wanted": {
-                "help": "SMARTS pattern of not wanted molecules (DEFINE A FILE HERE)",
-                "action": "store",
-                "metavar": "SMARTS_STRING",
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpre_pains_family": {
-                "help": "PAINS family of patterns to reject (allowed: a, b, all)",
-                "action": "store",
-                # "metavar": "[a|b|c|all]",
-                "choices": ("a", "b", "c", "all"),
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-        },
-    },
-    # TODO this needs to be updated once the classes are completed
-    "filter_post": {
-        "description": """Options for post-filter settings (i.e. after
-        processing occurred and before getting saved to the output)
-        by defaults all filters are disabled, and can be
-        enabled by defining any filter values.""",
-        "values": {
-            "--filtpost_mw_max": {
-                "help": "max mw to accept",
-                "action": "store",
-                "metavar": "MAX_MW",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_mw_min": {
-                "help": "min mw to accept",
-                "action": "store",
-                "metavar": "MIN_MW",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_num_at_min": {
-                "help": "min num atoms to accept",
-                "action": "store",
-                "metavar": "MIN_NUM_ATOMS",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_num_at_max": {
-                "help": "max num atoms to accept",
-                "action": "store",
-                "metavar": "MAX_NUM_ATOMS",
-                "required": False,
-                "type": float,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_smarts_wanted": {
-                "help": "SMARTS pattern of wanted molecules (DEFINE A FILE HERE)",
-                "action": "store",
-                "metavar": "SMARTS_STRING",
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_smarts_not_wanted": {
-                "help": "SMARTS pattern of not wanted molecules (DEFINE A FILE HERE)",
-                "action": "store",
-                "metavar": "SMARTS_STRING",
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--filtpost_pains_family": {
-                "help": "PAINS family of patterns to reject (allowed: a, b, all)",
-                "action": "store",
-                "choices": ("a", "b", "c", "all"),
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-        },
-    },
-    "reaction": {
-        "description": "Options for performing chemical modifications of the input molecules",
-        "values": {
-            "--react_mode": {
-                "help": 'specify the mode of reaction to be exhaustive ("all") or individual enumeration of each reaction site ("single"))',
-                "action": "store",
-                # "metavar": "all|single",
-                "choices": ("all", "single"),
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--react_reactions_file": {
-                "help": "specify a file containing SMIRKS reactions (one per line) to be used for the transformations",
-                "action": "store",
-                "metavar": "FILENAME",
-                "required": False,
-                "type": str,
-                "default": argparse.SUPPRESS,
-            },
-            "--react_verbose": {
-                "help": "enable verbose mode for the reaction to track the procress -- WARNING: this can generate a lot of data when processing many molecules",
-                "action": "store",
-                "metavar": "",
-                "required": False,
-                "type": bool,
-                "default": argparse.SUPPRESS,
-            },
-            "--react_keep_only_reacted": {
-                "help": "keep only molecules that reacted; molecules that do not react are discarded",
-                "action": "store",
-                "metavar": "",
-                "required": False,
-                "type": bool,
                 "default": argparse.SUPPRESS,
             },
         },

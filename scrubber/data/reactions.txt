@@ -1,2 +1,0 @@
-[N:1][C:2] >> C=C-C(=O)[N:1][C:2]   acrylamide_simple
-[O:1][c1ccccc1] >> S(=O)(=O)(F)[O:1][c1ccccc1]  fluorosulfate

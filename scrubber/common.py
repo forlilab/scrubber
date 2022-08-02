@@ -8,13 +8,6 @@ DATA_DIR = "data"
 DATA_PATH = os.path.join(os.path.dirname(__file__), DATA_DIR)
 
 
-# from . import storage, scrubbercore
-
-# TODO modify behavior so if the default options are empty, default_init is returned? (brittle!!!)
-
-
-# an rdkit mol instance is this: Chem.rdchem.Mol
-
 __all__ = ["DATA_PATH", "ScrubberBase", "UniqueMoleculeContainer"]
 
 
@@ -207,10 +200,7 @@ class UniqueMoleculeContainer():
         self.__chirality = not ignore_chirality
         if not argument is None:
             if isinstance(argument, UniqueMoleculeContainer):
-                # TODO check if shallow copy is sufficient!
                 self.__data = argument.__data.copy()
-                # for k, v in argument.__data.items():
-                #     self.__data[k] = v
             elif isinstance(argument, list) or isinstance(argument, tuple):
                 for m in argument:
                     self.add(m)
@@ -225,7 +215,6 @@ class UniqueMoleculeContainer():
     def add(self, mol:Chem.rdchem.Mol, replace=False) -> bool:
         """add RDKit molecule if not present already; if replace==False, then the
         molecule is replaced with the new mol object"""
-        # key = Chem.MolToSmiles(Chem.RemoveHs(mol), isomericSmiles=self.__chirality)
         key = mol2smi(mol, self.__chirality)
         if key in self.__data and not replace:
             return False

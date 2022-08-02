@@ -106,10 +106,6 @@ class GeometryGenerator(ScrubberBase):
         }
         # run the cycle once (better than try/except?)
         while True:
-            # if self._handbrake:
-            #     report["state"] = "interrupted (handbrake)"
-            #     report["accepted"] = -1
-            #     break
             try:
                 # generate 3D coordinates if requested
                 if not self.gen3d_engine is None:
@@ -117,8 +113,6 @@ class GeometryGenerator(ScrubberBase):
                     try:
                         rdDistGeom.EmbedMolecule(
                             mol, self.gen3d_engine)
-                        # TODO this is raising an error in RDKit, figure out
-                        # TODO check if disabled in the code?
                     except Exception as err:
                         report["state"] = err.__str__()
                         report["accepted"] = -1
@@ -132,16 +126,14 @@ class GeometryGenerator(ScrubberBase):
                     self._fix_amide(mol)
                 for steps in range(self.auto_iter_cycles):
                     report["iter_cycles"] += 1
-                    # try:
-                    if True:
+                    try:
                         out = self.ff_optimize(mol, **self.ff_parms)
-                    # TODO this part of the code should be uncommented only at the verey end...
-                    # except Exception as err:
-                    #     report['state'] = err.__str__()
-                    #     report['accepted'] = -1
-                    #     # print("CAPTURED EXOTIC ERROR!", report['state'])
-                    #     # return report
-                    #     break
+                    except Exception as err:
+                        report['state'] = err.__str__()
+                        report['accepted'] = -1
+                        print("CAPTURED EXOTIC ERROR!", report['state'])
+                        return report
+                        break
                     if out == -1:
                         report["state"] = "ff_fail"
                         report["accepted"] = -1
@@ -157,7 +149,6 @@ class GeometryGenerator(ScrubberBase):
                 report["state"] =  err.__str__()  #"ff_fail"
                 report["accepted"] = -1
                 break
-            # return report
             break
         report["mol"] = PropertyMol(report["mol"])
         return report

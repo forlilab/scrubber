@@ -60,10 +60,10 @@ if __name__ == "__main__":
     test_scrubber(config, smiles_list)
 
     # initialize serial scrubber
-    # config['general']['values']["max_proc"] = 1
-    # print("\n\n=============================")
-    # print("test SERIAL scrubber")
-    # print("=============================")
-    # test_scrubber(config, smiles_list)
+    config['general']['values']["max_proc"] = 1
+    print("\n\n=============================")
+    print("test SERIAL scrubber")
+    print("=============================")
+    test_scrubber(config, smiles_list)
 
 # HERE IT HANDS TODO

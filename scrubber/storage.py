@@ -1,5 +1,6 @@
 import sys
 from io import BytesIO
+# import cPickle as pickle
 import pickle
 import re
 
@@ -25,9 +26,7 @@ should be implemented here
 """
 VALID_FORMATS = ["smi", "sdf"]
 
-# TODO use cPickle for pipes
 # TODO implement a non-strict parsing to use molvis-like fixing operations (i.e.: nitro-fixes?)
-
 
 class MoleculeProvider(ScrubberBase):
     """This is the class of Molecule Providers iterator, which behave all the same:
@@ -36,7 +35,6 @@ class MoleculeProvider(ScrubberBase):
 
     - an optional property can be specified to set the molecule name (often the vendor catalog id)
     - if the molecule has no name ("_Name" property), a default ("MOL") will be assigned
-
     """
 
     # TODO add multithreaded mol supplier
@@ -230,9 +228,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
     # write to STOUD
     >>> ms = MoleculeStorage(pipe=True)
     """
-
-    # TODO this should be split into an abstract class and MoleculeFileStorage, MoleculePipeStorage, etc...
-
     out_format_opts_default = {
         "single": {"smi": {}, "sdf": {}},
         "split": {"smi": {}, "sdf": {}},
@@ -325,7 +320,7 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
 
     def close(self):
         """wrap up operations when code is completed"""
-        # CHECK THAT THE WRITER QUEUE IS NOT EMPTY?
+        # TODO CHECK THAT THE WRITER QUEUE IS NOT EMPTY?
         if not self.writer is None:
             self.writer.close()
         if not self.comm_pipe is None:
@@ -334,32 +329,26 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
     def run(self):
         """multithreading default function with listening loop that waits for
         molecules to be written"""
-        # TODO handle these:
-        # - subdir creations
-        # - duplicate fnames
+        # TODO handle duplicate fnames
         while True:
-            # TODO addd try/except for thread safety
             try:
                 if self.handbrake is not None and self.handbrake.is_set():
                     self.close()
                     return
-                # print("READING HERE...")
                 package = self.queue.get()
-                # TODO CHECK IF THIS TRY/EXCEPT BLOCK IS REQUIRED
             except KeyboardInterrupt:
-                # print("writer done (Ctrl-C)")
                 self.close()
                 return
             if package is None:
                 # poison pill
                 self.workers_count -= 1
                 if self.workers_count == 0:
-                    # TODO this might be superfluous
-                    if not self.writer is None:
-                        self.writer.close()
-                    if not self.comm_pipe is None:
-                        # self.comm_pipe.send(self._counter)
-                        self.comm_pipe.send("writer:%d" % self._counter)
+                    self.close()
+                    # # TODO this might be superfluous
+                    # if not self.writer is None:
+                    #     self.writer.close()
+                    # if not self.comm_pipe is None:
+                    #     self.comm_pipe.send("writer:%d" % self._counter)
                     return
                 else:
                     continue
@@ -382,7 +371,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
                     fp.write(mol)
             elif self.mode == "pipe":
                 pickle.dump(mol, sys.stdout.buffer)
-            # self._counter += 1
 
     def _get_outfname(
         self,
@@ -401,12 +389,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
         if self.naming == "name":
             # extract the field from RDKit molecule
             basename = mol.GetProp("_Name")
-        # elif self.naming == "field":
-        #     # extract the name from RDKit molecule
-        #     try:
-        #         basename = mol.GetProp(self.naming_field).strip()
-        #     except KeyError:
-        #         basename = ""
         if (self.naming == "auto") or (len(basename) == 0):
             if len(self._basename):
                 basename = "%s_%s" % (self._basename[0], self._counter)
@@ -425,9 +407,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
             dirname = dirname[0]
         if not os.path.exists(dirname):
             os.makedirs(dirname)
-        # else:
-        #     if not self.overwrite:
-        #         raise FileExistsError
         fullpath = "%s%s%s.%s" % (dirname, os.path.sep, basename, ext)
         if os.path.exists(fullpath):
             attempt = 0
@@ -440,7 +419,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
                     attempt,
                     ext,
                 )
-                # fullpath = "%s_v%d.%s" % (os.path.sep.join(dirname + basename), attempt, ext)
         return fullpath
 
     def _sanitize_string(self, string):
