@@ -1,22 +1,58 @@
-# Raccoon Scrubber
-Raccoon Scrubber is a ligand library processing tool to generate 3D molecules ready to dock starting from any supported file format (OB3)
+# Scrubber
+Process large numbers of small molecules for docking with AutoDock.
+May be useful for structure-based modeling in general.
 
-## Dependencies
-The code depends on OpenBabel v.3.x or newer.
+What happens:
+ - generate 3D coordinates using RDKit's ETKDGv3 and UFF minimization
+ - enumerate tautomers (aiming at low energy states only)
+ - enumerate pH corrections
+ - convert boats to chairs (6-member rings) and enumerate both chair states
+ - enumerate chiral centers
 
-## Usage
+
+# Installation
+```sh
+conda activate <desired-environment>    # if you are using conda environments
+
+git clone git@github.com:forlilab/scrubber.git
+cd scrubber
+pip install -e .
 ```
 
-usage: scrubber.py [-h] --infile INPUT_FILE[.EXT] [--outfile OUTPUT_FILE[.EXT]] [--informat [mol2|sdf|smi|pdb|...]] [--outformat [mol2|sdf|pdb|...]] [--usemolname] [--usemolnamesafe] [--usefieldname FIELD]
-                   [--single STRUCTURE_NUMBER] [--begin FIRST_STRUCTURE_NUMBER] [--end LAST_STRUCTURE_NUMBER] [--split] [--byname MOL_NAME] [--pH [7.4]] [--nopH] [--noflipamide] [--nostripsalts] [--nocheckhydro]
-                   [--noprocess] [--enumchiral [undefined|protomer|all|off]] [--maxenumchiral MAX_ENANTIOMERS] [--exclude SMARTS] [--excludefromfile FILENAME] [--automini [quick|accurate|long|extreme]]]
-                   [--sdsteps [ 300]] [--sdconv [1e-05]] [--cgsteps [300]] [--cgconv [1e-06]] [--forcefield [mmff94s]] [--sdsteps_extra [1000]] [--sdconv_extra [1e-05]] [--cgsteps_extra [1000]]
-                   [--cgconv_extra [1e-06]] [--forcefield_extra [uff]] [--rotamer_conf [10]] [--rotamer_steps [5]] [--nomini] [--noextra] [--norotamer] [--chargemodel [gasteiger]] [--strict] [--multicore [8]]
-                   [--nice NICE] [--log LOGFILENAME] [--verbose] [--help_advanced]
+Depends on the RDKit, which can be installed from conda-forge in the desired environment:
+```sh
+conda activate <desired-environment>
+conda install rdkit -c conda-forge
 ```
-## TODO
 
-- [ ] disable rotameric search by default
-- [ ] find optimal SD/CG default parameters
-- [X] test and activate automatic heuristic for minimization parameters
-- [ ] trap SIGINT signals (Ctrl-C) to send poison pills to workers and end gracefully
+## Python scripting
+```python
+from rdkit import Chem
+from scrubber.core import ScrubberCore
+
+scrub = ScrubberCore()
+
+mol = Chem.MolFromSmiles("Clc1ccccc1C(=O)Nc2nc[nH]c2")
+microstates = []
+microstate_generator = scrub.process(mol)
+
+# each state is an rdkit mol
+for state in microstate_generator:
+    microstates.append(state)
+```
+
+## Command line tool
+```sh
+scrub.py --in_fname test.smi --out_fname test.sdf
+```
+
+Where "test.smi" can look like this:
+```
+CC(=O)O aceticacid
+CN(C)C trimethylamine 
+Clc1cc(O)ccc1C(=O)Nc2nc[nH]c2 hello_mol
+c1cccc1 rdkit_will_cry
+CCC good4bbq
+CCO alsogood4bbq
+c1cccnc1CC(=O)C a_ketone
+```

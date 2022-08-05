@@ -87,8 +87,9 @@ class ScrubberCore(object):
 
     def __init__(self, options: dict = None):
         """this is where the classes doing all operations will do"""
-        self.options = options
-        self._parse_init(self.options)
+        if options is None:
+            options = self.get_defaults()
+        self.options = self._conditional_activation_isomers_geometry(options)
         self.geometry_optimize = None
         self.isomer = None
         self._success_cutoff = 0
@@ -222,18 +223,19 @@ class ScrubberCore(object):
                 defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
         return defaults
 
-    def _parse_init(self, options: dict) -> None:
-        """extend the parent parse_init to add a check for the isomers and flag
+    def _conditional_activation_isomers_geometry(self, options: dict) -> None:
+        """check for the isomers/geometry and flag
         the class as active if at least one of the enumerations is requested"""
         # isomers
-        self.options["isomers"]["active"] = any(
-            self.options["isomers"]["values"][x]
+        options["isomers"]["active"] = any(
+            options["isomers"]["values"][x]
             for x in ["stereo_enum", "proto_enum", "tauto_enum"]
         )
         # geometry operations
-        self.options["geometry"]["active"] = any(
-            self.options["geometry"]["values"][x] for x in ["gen3d", "fix_ring_corners"]
+        options["geometry"]["active"] = any(
+           options["geometry"]["values"][x] for x in ["gen3d", "fix_ring_corners"]
         )
+        return options
 
     def process(self, mol):
         """process a molecule and return one or more valid molecules"""
