@@ -10,6 +10,7 @@ import threading
 import multiprocessing
 import queue
 import os
+import rdkit
 from rdkit import Chem, RDLogger
 from rdkit.Chem.PropertyMol import PropertyMol
 
@@ -313,7 +314,6 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
                     "Invalid outpuf file format: current(%s), "
                     "accepted (%s)" % (self._ext, ",".join(VALID_FORMATS))
                 )
-
         elif self.mode == "pipe":
             # write to pipe
             pass
@@ -339,7 +339,10 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
             except KeyboardInterrupt:
                 self.close()
                 return
+            # print(Q)
+
             if package is None:
+                print("RECEIVED A POISON PILL?")
                 # poison pill
                 self.workers_count -= 1
                 if self.workers_count == 0:
@@ -353,9 +356,13 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
                 else:
                     continue
             try:
-                mol = package["mol"]
-            except:
-                print("PROBLEMATIC PACKAGE!", package)
+                if isinstance(package, rdkit.Chem.rdchem.Mol):
+                    mol = package
+                else:
+                    mol = package["mol"]
+                # print("GOT MOL", mol)
+            except Exception as exc:
+                print("\n\n\n\nPROBLEMATIC PACKAGE!", package, exc, "\n\n\n\n")
                 sys.exit(1)
             if self.mode == "single":
                 # save all non-private properties in the current molecule

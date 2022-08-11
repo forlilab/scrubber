@@ -8,6 +8,8 @@ from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.PropertyMol import PropertyMol
 
 from ..common import ScrubberBase, copy_mol_properties
+# from .ringcorners import RingManager
+
 
 # TODO
 # print add proper reporting for each molecule that gets put into the queue_err, so a Scrubber_error field can be added in the output molecule
@@ -151,6 +153,8 @@ class GeometryGenerator(ScrubberBase):
                 break
             break
         report["mol"] = PropertyMol(report["mol"])
+        if self.fix_ring_corners:
+            print("RING CORNERS FLIPPED HERE")
         return report
 
     def _fix_amide(self, mol):

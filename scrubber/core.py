@@ -365,12 +365,13 @@ class ScrubberCore(object):
                     )
                 if not self.isomer is None:
                     self.isomer.process(mol)
-                    mol_isomers = self.isomer.mol_pool
+                    mol_pool = self.isomer.mol_pool
                 else:
-                    mol_isomers = [mol_out]
-                for mol_raw in mol_isomers:
+                    mol_pool = [mol]
+                for mol_raw in mol_pool:
                     mol_raw.SetProp("Scrubber_was_here", "Yes!")
                     self._target_queue.put(PropertyMol(mol_raw), block=True)
+
             print(
                 "\r ----- COMPLETED -----                                                         "
             )
