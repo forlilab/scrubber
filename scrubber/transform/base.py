@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from rdkit import RDLogger
 from rdkit import Chem #, AtomValenceException, KekulizeException
+from rdkit.Chem import AllChem
 from rdkit.Chem.PropertyMol import PropertyMol
 
 from ..common import UniqueMoleculeContainer, mol2smi, copy_mol_properties
@@ -330,13 +331,26 @@ def parse_reaction_file(datafile: str) -> list:
             if line[0] == "#" or not line.strip():
                 continue
             rxn_left, rxn_right = line.split(">>")
-            rxn_right, tag = rxn_right.split(None, 1)
+            rxn_right, tag = rxn_right.split(maxsplit=1)
             tag = tag.strip()
-            rxn_string = "%s >> %s" % (rxn_left, rxn_right)
-            rxn_obj = Chem.AllChem.ReactionFromSmarts(rxn_string)
-            reactions.append((rxn_obj, rxn_left, rxn_right, tag))
+            #rxn_string = "%s >> %s" % (rxn_left, rxn_right)
+            #rxn_obj = Chem.AllChem.ReactionFromSmarts(rxn_string)
+            #reactions.append((rxn_obj, rxn_left, rxn_right, tag))
+            reactions.append((rxn_left, rxn_right, tag))
     return reactions
 
+def build_pka_reactions(reactions):
+    pka_reactions = []
+    for (rxn_left, rxn_right, tag) in reactions:
+        name, pka = tag.split()
+        r = {}
+        r["name"] = name
+        r["pka"] = float(pka)
+        r["rxn_lose_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_left, rxn_right))
+        r["rxn_gain_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_right, rxn_left))
+        pka_reactions.append(r)
+    return pka_reactions
+ 
 
 class MaxResultsException(Exception):
     """custom class to manage abrupt interruption of iterations due to maximum
@@ -351,6 +365,26 @@ class MaxIterException(Exception):
 
     pass
 
+
+def apply_reactions(mol, reaction_list):
+    out_mol_list = []
+    for reaction in reaction_list:
+        nr_react = reaction.GetNumReactantTemplates()
+        nr_prod = reaction.GetNumProductTemplates()
+        if nr_react != 1 or nr_prod != 1:
+            raise RuntimeError("reactions must be single reactant -> single product")
+    for reaction in reaction_list:
+        for product in reaction.RunReactants((mol,)): # length should be 1
+            print(product)
+            try:
+                product = Chem.SanitizeMol(product[0]) # 0 because 1 ProductTemplates
+                out_mol_list.append(product)
+            # the following exceptions arise often with Chem.SanitizeMol
+            except Chem.AtomValenceException:
+                continue
+            except Chem.KekulizeException:
+                continue
+    return out_mol_list
 
 
 def exhaustive_reaction(
