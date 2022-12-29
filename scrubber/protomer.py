@@ -46,7 +46,23 @@ def build_pka_reactions(reactions):
         pka_reactions.append(r)
     return pka_reactions
 
-def convert_recursive(mol, rxn):
+def convert_recursive(mol, rxn, container):
+    nr_react = rxn.GetNumReactantTemplates()
+    nr_prod = rxn.GetNumProductTemplates()
+    if nr_react != 1 or nr_prod != 1:
+        raise RuntimeError("reaction %s must be single reactant -> single product" % name)
+    for products in rxn.RunReactants((mol,)):
+        product = products[0] # nr products == NumProductTemplates == 1
+        try:
+            Chem.SanitizeMol(product)
+        except Chem.AtomValenceException:
+            continue
+        except Chem.KekulizeException:
+            continue
+        container.add(product)
+        convert_recursive(product, rxn, container)
+
+def convert_exhaustive(mol, rxn):
     """
         - If the reaction occurs, return the product.
         - If the reaction does not occur or sanitization fails, return the input mol.
@@ -75,11 +91,38 @@ def convert_recursive(mol, rxn):
         except Chem.KekulizeException:
             return mol
         # run reaction again with the product to return 
-        return convert_recursive(product, rxn)
+        return convert_exhaustive(product, rxn)
     else:
         raise RuntimeError("RunReactants(maxProducts=1) returned %d products" % len(products_list))
 
+
 def enumerate_pka(mol, pka_reactions, ph_range_low, ph_range_high):
+    if ph_range_low > ph_range_high:
+        raise ValueError("ph_range_low must be lesser than or equal to ph_range_high")
+    mol_list = [mol]
+    for r in pka_reactions:
+        if ph_range_high < r["pka"]:
+            mol_list = [convert_exhaustive(mol, r["rxn_gain_h"]) for mol in mol_list]
+        elif ph_range_low > r["pka"]:
+            mol_list = [convert_exhaustive(mol, r["rxn_lose_h"]) for mol in mol_list]
+        else: # keep both states for each transformation
+            tmp = UniqueMoleculeContainer()
+            for mol in mol_list:
+                tmp.add(mol)
+                convert_recursive(mol, r["rxn_gain_h"], tmp)
+                convert_recursive(mol, r["rxn_lose_h"], tmp)
+            mol_list = [mol for mol in tmp]
+    return mol_list
+
+
+def enumerate_pka_fewer_combos(mol, pka_reactions, ph_range_low, ph_range_high):
+    """ if the pka of a reaction is between ph_range_low and pk_range_high, and the
+        molecule has multiple substructures that are affected by the reaction,
+        no states will be returned with a subset of the substructures reacted.
+        There will be states in which all the substructures reacted, and states
+        in which zero substructures reacted. This limitation is for combinations of
+        states within each reaction, not across reactions. 
+    """
     if ph_range_low > ph_range_high:
         raise ValueError("ph_range_low must be lesser than or equal to ph_range_high")
     mol_set = [mol]
@@ -91,13 +134,9 @@ def enumerate_pka(mol, pka_reactions, ph_range_low, ph_range_high):
         tmp = set()
         if ph_range_low <= r["pka"]:
             for mol in mol_set:
-                tmp.add(convert_recursive(mol, r["rxn_gain_h"]))
+                tmp.add(convert_exhaustive(mol, r["rxn_gain_h"]))
         if ph_range_high >= r["pka"]:
             for mol in mol_set:
-                tmp.add(convert_recursive(mol, r["rxn_lose_h"]))
-        print("tmp", tmp)
+                tmp.add(convert_exhaustive(mol, r["rxn_lose_h"]))
         mol_set = [mol for mol in tmp]
-        print("mol_set", tmp)
-        print()
-        
     return mol_set
