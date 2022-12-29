@@ -3,9 +3,9 @@
 import sys
 import pathlib
 
-from scrubber.transform import enumerate_pka
-from scrubber.transform import parse_reaction_file
-from scrubber.transform import build_pka_reactions
+from scrubber import enumerate_pka
+from scrubber import parse_reaction_file
+from scrubber import build_pka_reactions
 import scrubber
 
 from rdkit import Chem
@@ -23,7 +23,8 @@ if __name__ == "__main__":
     mol = Chem.MolFromSmiles(smiles)
     reactions = parse_reaction_file(pka_file)
     pka_reactions = build_pka_reactions(reactions)
-    print(pka_reactions)
     output = enumerate_pka(mol, pka_reactions, ph_low, ph_high)
     print(len(output))
+    for o in output:
+        print(Chem.MolToSmiles(o))
         

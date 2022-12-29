@@ -14,9 +14,9 @@ from .base import MoleculeTransformations
 from .base import MaxResultsException
 from .base import MaxIterException
 from .base import MolecularReactionsLogger
-from .base import parse_reaction_file
+#from .base import parse_reaction_file
 from .base import exhaustive_reaction
-from .base import apply_reactions
+#from .base import apply_reactions
 
 
 # TODO add pro-chiral patterns?
@@ -673,29 +673,3 @@ def enumerate_tautomers(
     check_property_violation(results, Chem.MolFromSmarts("[a]"))
     check_property_violation(results, Chem.MolFromSmarts("[OX1,SX1]=[CX3][NX3]"))
     return results
-
-def build_pka_reactions(reactions):
-    pka_reactions = []
-    for (rxn_left, rxn_righ, tag) in reactions:
-        name, pka = tag.split()
-        r = {}
-        r["name"] = name
-        r["pka"] = float(pka)
-        r["rxn_lose_h"] = Chem.ReactionFromSmarts("%s >> %s" % (rxn_left, rxn_right))
-        r["rxn_gain_h"] = Chem.ReactionFromSmarts("%s >> %s" % (rxn_right, rxn_left))
-        pka_reactions.append(r)
-    return pka_reactions
-        
-
-def enumerate_pka(mol, pka_reactions, ph_range_low, ph_range_high):
-    if ph_range_low > ph_range_high:
-        raise ValueError("ph_range_low must be lesser than ph_range_high")
-    selected_reactions = []
-    for r in pka_reactions:
-        if ph_range_low <= r["pka"]:
-            selected_reactions.append(r["rxn_gain_h"])
-        if ph_range_high >= r["pka"]:
-            selected_reactions.append(r["rxn_lose_h"])
-    print(len(selected_reactions))
-    product_list = apply_reactions(mol, selected_reactions)
-    return product_list
