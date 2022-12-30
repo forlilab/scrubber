@@ -215,7 +215,8 @@ class UniqueMoleculeContainer():
     def add(self, mol:Chem.rdchem.Mol, replace=False) -> bool:
         """add RDKit molecule if not present already; if replace==False, then the
         molecule is replaced with the new mol object"""
-        key = mol2smi(mol, self.__chirality)
+        #key = mol2smi(mol, self.__chirality)
+        key = Chem.MolToSmiles(mol)
         if key in self.__data and not replace:
             return False
         self.__data[key] = mol

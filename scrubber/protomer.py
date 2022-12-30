@@ -1,6 +1,9 @@
 from .common import UniqueMoleculeContainer
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdChemReactions
+
+from rdkit.Chem import rdMolInterchange
 
 def parse_reaction_file(datafile: str) -> list:
     """parse a datafile by stripping comment and empty lines
@@ -16,10 +19,10 @@ def parse_reaction_file(datafile: str) -> list:
 
     """
     reactions = []
-    # for a future GUI...
     with open(datafile, "r") as fp:
-        for idx, line in enumerate(fp.readlines()):
-            if line[0] == "#" or not line.strip():
+        for line in fp:
+            line = line.strip()
+            if line[0] == "#" or len(line) == 0:
                 continue
             rxn_left, rxn_right = line.split(">>")
             rxn_right, tag = rxn_right.split(maxsplit=1)
@@ -29,6 +32,23 @@ def parse_reaction_file(datafile: str) -> list:
             #reactions.append((rxn_obj, rxn_left, rxn_right, tag))
             reactions.append((rxn_left, rxn_right, tag))
     return reactions
+
+def parse_tautomers_config_file(fname):
+    reactions = []
+    keepmax_smarts = []
+    with open(fname) as f:
+        for line in f:
+            line = line.strip()
+            if len(line) == 0 or line[0] == "#":
+                continue
+            if line.startswith("KEEPMAX_SMARTS"):
+                _, smarts, name = line.split()
+                keepmax_smarts.append({"smarts": smarts, "name": name})
+            else:
+                smirks, name = line.split()
+                reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name})
+    return reactions, keepmax_smarts
+            
 
 def build_pka_reactions(reactions):
     pka_reactions = []
@@ -46,27 +66,48 @@ def build_pka_reactions(reactions):
         pka_reactions.append(r)
     return pka_reactions
 
-def convert_recursive(mol, rxn, container):
+def react_and_sanitize(mol, rxn):
     nr_react = rxn.GetNumReactantTemplates()
     nr_prod = rxn.GetNumProductTemplates()
     if nr_react != 1 or nr_prod != 1:
         raise RuntimeError("reaction %s must be single reactant -> single product" % name)
-    for products in rxn.RunReactants((mol,)):
-        product = products[0] # nr products == NumProductTemplates == 1
+    output_products = []
+    products = rxn.RunReactants((mol,))
+    for product in products:
+        product = product[0] # nr products == NumProductTemplates == 1
         try:
-            Chem.SanitizeMol(product)
-        except Chem.AtomValenceException:
+            s = Chem.SanitizeMol(product)
+            #product.UpdatePropertyCache()
+            # loading a fresh molecule detects errors that updating the property cache doesn't
+            product = Chem.MolFromSmiles(Chem.MolToSmiles(product))
+            if product is None:
+                continue
+        except Chem.AtomValenceException as e:
             continue
-        except Chem.KekulizeException:
+        except Chem.KekulizeException as e:
             continue
+        except Exception as e:
+            print("uncought exception", e, type(e))
+            continue
+        #print(product)
+        #print(rdMolInterchange.MolToJSON(product))
+        #print("-->", Chem.MolToSmiles(product), product)
+        #print("-->", Chem.MolToSmiles(Chem.RemoveHs(product)))
+        #print()
+        output_products.append(product)
+    return output_products
+
+def convert_recursive(mol, rxn, container):
+    for product in react_and_sanitize(mol, rxn):
         container.add(product)
         convert_recursive(product, rxn, container)
 
 def convert_exhaustive(mol, rxn):
     """
-        - If the reaction occurs, return the product.
-        - If the reaction does not occur or sanitization fails, return the input mol.
-        - If multiple substructures react, the returned product will have all groups converted
+        Returns exactly one molecule:
+            - the product when the reaction occurs and sanitization succeeds,
+            - the input mol otherwise.
+        The returned product will have all substructures reacted.
     """
     nr_react = rxn.GetNumReactantTemplates()
     nr_prod = rxn.GetNumProductTemplates()
@@ -140,3 +181,37 @@ def enumerate_pka_fewer_combos(mol, pka_reactions, ph_range_low, ph_range_high):
                 tmp.add(convert_exhaustive(mol, r["rxn_lose_h"]))
         mol_set = [mol for mol in tmp]
     return mol_set
+
+def enumerate_tautomers(mol, tauto_reactions, keepmax_smarts, nr_rounds=2):
+    tautomers = UniqueMoleculeContainer([mol])
+    for roundid in range(nr_rounds):
+        tmp = UniqueMoleculeContainer()
+        for mol in tautomers:
+            for r in tauto_reactions:
+                uniq = UniqueMoleculeContainer()
+                products = react_and_sanitize(mol, r["rxn"])
+                for product in products:
+                    tmp.add(product)
+        for mol in tmp:
+            tautomers.add(mol)
+
+    # count occurences of each SMARTS
+    smarts_count = [[0]*len(tautomers) for _ in keepmax_smarts]
+    for i, smarts in enumerate(keepmax_smarts):
+        smarts_mol = Chem.MolFromSmarts(smarts["smarts"])
+        for j, mol in enumerate(tautomers):
+            smarts_count[i][j] = len(mol.GetSubstructMatches(smarts_mol))
+
+    # select tautomers that have the max count of each SMARTS
+    max_of_all_counts = False # fewer tautomers if set to True
+    is_selected = [True] * len(tautomers)
+    for count in smarts_count:
+        current_max = max([count[i] for i in range(len(tautomers)) if is_selected[i] or max_of_all_counts])
+        for j in range(len(tautomers)):
+            is_selected[j] = is_selected[j] and (count[j] == current_max)
+    
+    output = [tautomers[j] for j in range(len(tautomers)) if is_selected[j]]
+    return output
+            
+        
+                
