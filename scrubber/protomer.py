@@ -22,7 +22,7 @@ def parse_reaction_file(datafile: str) -> list:
     with open(datafile, "r") as fp:
         for line in fp:
             line = line.strip()
-            if line[0] == "#" or len(line) == 0:
+            if len(line) == 0 or line[0] == "#":
                 continue
             rxn_left, rxn_right = line.split(">>")
             rxn_right, tag = rxn_right.split(maxsplit=1)
