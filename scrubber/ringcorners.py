@@ -95,13 +95,11 @@ def bite_own_tail_recursively(mol, seed_atom_idx, visited, tail_indices):
     does_bite = False
     for neigh in mol.GetAtomWithIdx(seed_atom_idx).GetNeighbors():
         idx = neigh.GetIdx()
-        print("entering with %d, looping over %d" % (seed_atom_idx, idx), visited)
         if idx in visited:
             continue
         if idx in tail_indices:
             does_bite = True
             continue
-        print("here")
         visited.append(idx)
         does_bite |= bite_own_tail_recursively(mol, idx, visited, tail_indices)
     return does_bite
@@ -133,14 +131,14 @@ def get_substituents(mol, indices, debug=False):
         data[idx] = atom_info
     return data
 
-def convert_boats_to_chairs(mol, coords):
+def convert_boats_to_chairs(mol, coords, debug=False):
     smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]" # one of six atoms
     smarts = smarts + "1" + smarts + smarts + smarts + smarts + smarts + "1"
     #if coords is None:
     #    coords = mol.GetConformer().GetPositions()
     new_coords = coords.copy()
     for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(smarts)):
-        score, flip_score, dot_edges, angles = process_ring6(coords, idxs, debug=True)
+        score, flip_score, dot_edges, angles = process_ring6(coords, idxs, debug=debug)
         data = get_substituents(mol, idxs)
         best_score = float("-inf")
         for i, idx in enumerate(idxs):
