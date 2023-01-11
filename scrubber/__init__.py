@@ -10,8 +10,6 @@ from .protomer import build_pka_reactions
 from .protomer import convert_recursive
 from .protomer import enumerate_pka
 from .protomer import enumerate_tautomers
-from .ringcorners import process_ring6
-from .ringcorners import get_substituents
 from .ringcorners import convert_boats_to_chairs
 
 # from . import scrubmain
