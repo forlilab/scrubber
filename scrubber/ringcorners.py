@@ -147,7 +147,6 @@ def calc_axial_likeliness(ringinfo, substituents, coords):
 def convert_boats_to_chairs(mol, coords, debug=False):
     one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
-    smarts = "C1CCC[*]C1"
     coords_list = []
     for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(smarts)):
         coords_list.extend(convert_boat_to_chair(mol, coords, idxs, debug))
@@ -195,7 +194,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         if flip_score < 0: # some mildly negative flip_scores may benefit from rotation
             continue
     
-        newpos = boatify_atom(idx, ringinfo, substituents, coords)
+        newpos = unboatify_atom(idx, ringinfo, substituents, coords)
         new_info = RingInfo(newpos, idxs)
         new_boat_likeliness = calc_boat_likeliness(new_info)
         new_axial_likeliness = calc_axial_likeliness(new_info, substituents, newpos)
@@ -210,7 +209,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
 
     return best_coords
 
-def boatify_atom(idx, ringinfo, substituents, coords, target_angle=3*math.pi/4):
+def unboatify_atom(idx, ringinfo, substituents, coords, target_angle=3*math.pi/4):
     coords = coords.copy()
     idx = ringinfo.indices.index(idx)
     c_idx = ringinfo.indices[idx]            # corner
