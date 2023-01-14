@@ -145,11 +145,30 @@ def calc_axial_likeliness(ringinfo, substituents, coords):
     return axial_likeliness
     
 def convert_boats_to_chairs(mol, coords, debug=False):
-    one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
-    smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
+    #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
+    #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
+    ring6_smarts = "[*]1[*][*][*][*][*]1"
+    amide_smarts = "[NX3]-[CX3]=[O,N,SX1]"
     coords = coords.copy()
-    for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(smarts)):
-        coords = convert_boat_to_chair(mol, coords, idxs, debug)
+    amide_idxs = mol.GetSubstructMatches(Chem.MolFromSmarts(amide_smarts))
+    for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(ring6_smarts)):
+        print("idxs:", idxs)
+        nr_rotatable_bonds = 0
+        for i in range(len(idxs)):
+            a = idxs[i]
+            b = idxs[(i+1) % len(idxs)]
+            bond_type = mol.GetBondBetweenAtoms(a, b).GetBondType()
+            is_single_bond = bond_type == Chem.rdchem.BondType.SINGLE
+            is_amide_bond = False
+            for indices in amide_idxs:
+                if (indices[0], indices[1]) == (a, b) or (indices[0], indices[1]) == (b, a):
+                    is_amide_bond = True
+                    break
+            if is_single_bond and not is_amide_bond:
+                nr_rotatable_bonds += 1
+        print("nr_rot:", nr_rotatable_bonds)
+        if nr_rotatable_bonds == len(idxs):
+            coords = convert_boat_to_chair(mol, coords, idxs, debug)
     return coords
         
 
