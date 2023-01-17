@@ -171,6 +171,7 @@ def do_ring_things(mol, coords, debug=False):
     amide_smarts = "[NX3]-[CX3]=[O,N,SX1]"
     amide_idxs = mol.GetSubstructMatches(Chem.MolFromSmarts(amide_smarts))
     ring6_rot6_idxs = []
+    ring6_rot5_idxs = []
     for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(ring6_smarts)):
         is_bond_rotatable = []
         for i in range(len(idxs)):
@@ -195,8 +196,7 @@ def do_ring_things(mol, coords, debug=False):
             offset = is_bond_rotatable.index(False) + 1
             # rigid bond between idxs[0] and idxs[-1]
             idxs = [idxs[(offset + i) % 6] for i in range(6)]
-            substituents = get_substituents(mol, idxs) # move up
-            coords = flip_ring6_rot5(coords, idxs, substituents)
+            ring6_rot5_idxs.append(idxs)
 
     # now we run methods that may return more than a single conformation
     coords_list = [coords]
@@ -208,20 +208,28 @@ def do_ring_things(mol, coords, debug=False):
             new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents)
             tmp.extend(new_coords)
         coords_list = tmp
+    for idxs in ring6_rot5_idxs:
+        tmp = []
+        substituents = get_substituents(mol, idxs)
+        for coords in coords_list:
+            new_coords = expand_ring6_rot5(coords, idxs, substituents)
+            tmp.extend(new_coords)
+        coords_list = tmp
     return coords_list
         
 
-def flip_ring6_rot5(coords, idxs, substituents, debug=False):
+def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     """
-            r1 -- h1
-                     \
-                      c1 (corner 1)
-                      |
-                      c2 (corner 2)
-                     /
-            r2 -- h2
+        (rod 1) r1 -- h1 (hinge 1)
+                       \
+                        c1 (corner 1)
+                        |
+                        c2 (corner 2)
+                       /
+       (rod 2) r2 -- h2 (hinge 2)
     """
-    
+
+    input_coords = coords.copy()
     r1, h1, c1, c2, h2, r2 = (coords[idxs[i]].copy() for i in range(6))
 
     # Consider the h1-c1-c2-h2 four-atom segment. To invert it's dihedral angle,
@@ -255,8 +263,16 @@ def flip_ring6_rot5(coords, idxs, substituents, debug=False):
     # rotate h2 substituents over r2-h2 axis
     angle = dihedral(r1, r2, h2, coords[idxs[3]]) - dihedral(r1, r2, h2, c2)
     coords = rotate_ring_atom(idxs[4], coords-h2, h2-r2, angle, substituents) + h2
-    
-    return coords
+
+    # return coords with least axial likeliness
+    input_axial = calc_axial_likeliness(substituents, input_coords)
+    mod_axial = calc_axial_likeliness(substituents, coords)
+    if input_axial / mod_axial > 1. + axial_range:
+        return [coords]
+    elif mod_axial / input_axial > 1. + axial_range:
+        return [input_coords]
+    else:
+        return [input_coords, coords]
 
 def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likeliness_range=0.1):
     if len(idxs) != 6:
@@ -302,14 +318,15 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likelin
     newpos = rotate_corner(idxs[best_index],           ringinfo, substituents, coords, rotangle)
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
-    if new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range:
-        return [newpos]
-    elif starting_axial_likeliness / new_axial_likeliness > 1.0 + axial_likeliness_range:
+    if starting_axial_likeliness < 0.05 and new_axial_likeliness < 0.05: # no subs?
         return [coords]
+    elif new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range:
+        return [coords]
+    elif starting_axial_likeliness / new_axial_likeliness > 1.0 + axial_likeliness_range:
+        return [newpos]
     else:
         return [coords, newpos]
          
-
 
 def convert_boat_to_chair(mol, coords, idxs, debug):
 
