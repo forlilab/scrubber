@@ -10,7 +10,7 @@ from .protomer import build_pka_reactions
 from .protomer import convert_recursive
 from .protomer import enumerate_pka
 from .protomer import enumerate_tautomers
-from .ringcorners import convert_boats_to_chairs
+from .ringcorners import do_ring_things
 
 # from . import scrubmain
 

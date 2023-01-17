@@ -38,7 +38,6 @@ class RingInfo:
     def __init__(self, coords, indices, debug=False):
         self.upness = {} # up (positive) or down (negative) relative to normal
         self.dot_edges = {} # how well aligned are the edges that flip each atom
-        self.angle = {} # rotation state around the axis that rotates each atom
         self.normal = {}
         self.centroid = {}
         self.indices = [i for i in indices]
@@ -56,7 +55,6 @@ class RingInfo:
             dot = np.dot(edge1, edge2)
 
             self.dot_edges[indices[i]] = dot
-            self.angle[indices[i]] = dihedral(centroid, b, d, c)
             self.centroid[indices[i]] = centroid
 
             # we have four atoms that define two edges, and a centroid.
@@ -129,7 +127,7 @@ def calc_boat_likeliness(ring_info):
         boat_likeliness += dot * u1 * u2
     return boat_likeliness
 
-def calc_axial_likeliness(ringinfo, substituents, coords):
+def calc_axial_likeliness_old(ringinfo, substituents, coords):
     axial_likeliness = 0.
     for idx in substituents: 
         for neigh_idx in substituents[idx]:
@@ -143,17 +141,38 @@ def calc_axial_likeliness(ringinfo, substituents, coords):
             dot = np.dot(v, ringinfo.normal[idx])
             axial_likeliness += weight * abs(dot)
     return axial_likeliness
-    
-def convert_boats_to_chairs(mol, coords, debug=False):
+
+def calc_axial_likeliness(substituents, coords):
+    axial_likeliness = 0.
+    centroid = np.mean([coords[j] for j in substituents], axis=0)
+    normals = []
+    for i in range(len(substituents)):
+        j = (i + 1) % len(substituents)
+        vi = norm(coords[i] - centroid)
+        vj = norm(coords[j] - centroid)
+        normals.append(np.cross(vi, vj))
+    normal = np.mean(normals, axis=0) # not normalized so length correlates with planarity of ring
+    for idx in substituents: 
+        for neigh_idx in substituents[idx]:
+            substituent = substituents[idx][neigh_idx]
+            if substituent["atomic_nr"] == 1:
+                continue
+            weight = 1 + substituent["nr_neighbors"]**2 / 3 # Me:1.0, Et:1.3, Ph:2.3, tert-butyl:4.0
+            v = norm(coords[neigh_idx] - coords[idx])
+            dot = np.dot(v, normal)
+            axial_likeliness += weight * abs(dot)
+    return axial_likeliness
+
+
+def do_ring_things(mol, coords, debug=False):
     #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
     ring6_smarts = "[*]1[*][*][*][*][*]1"
     amide_smarts = "[NX3]-[CX3]=[O,N,SX1]"
-    coords = coords.copy()
     amide_idxs = mol.GetSubstructMatches(Chem.MolFromSmarts(amide_smarts))
+    ring6_rot6_idxs = []
     for idxs in mol.GetSubstructMatches(Chem.MolFromSmarts(ring6_smarts)):
-        print("idxs:", idxs)
-        nr_rotatable_bonds = 0
+        is_bond_rotatable = []
         for i in range(len(idxs)):
             a = idxs[i]
             b = idxs[(i+1) % len(idxs)]
@@ -164,23 +183,148 @@ def convert_boats_to_chairs(mol, coords, debug=False):
                 if (indices[0], indices[1]) == (a, b) or (indices[0], indices[1]) == (b, a):
                     is_amide_bond = True
                     break
-            if is_single_bond and not is_amide_bond:
-                nr_rotatable_bonds += 1
-        print("nr_rot:", nr_rotatable_bonds)
-        if nr_rotatable_bonds == len(idxs):
+            is_bond_rotatable.append(is_single_bond and not is_amide_bond)
+
+        # saturated rings (e.g. cyclohexane, piperidine)
+        if sum(is_bond_rotatable) == 6:
+            ring6_rot6_idxs.append(idxs)
             coords = convert_boat_to_chair(mol, coords, idxs, debug)
-    return coords
+
+        # 6-member rings with one rigid bond
+        if sum(is_bond_rotatable) == 5:
+            offset = is_bond_rotatable.index(False) + 1
+            # rigid bond between idxs[0] and idxs[-1]
+            idxs = [idxs[(offset + i) % 6] for i in range(6)]
+            substituents = get_substituents(mol, idxs) # move up
+            coords = flip_ring6_rot5(coords, idxs, substituents)
+
+    # now we run methods that may return more than a single conformation
+    coords_list = [coords]
+    for idxs in ring6_rot6_idxs:
+        tmp = []
+        substituents = get_substituents(mol, idxs)
+        for coords in coords_list:
+            ringinfo = RingInfo(coords, idxs, debug)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents)
+            tmp.extend(new_coords)
+        coords_list = tmp
+    return coords_list
         
+
+def flip_ring6_rot5(coords, idxs, substituents, debug=False):
+    """
+            r1 -- h1
+                     \
+                      c1 (corner 1)
+                      |
+                      c2 (corner 2)
+                     /
+            r2 -- h2
+    """
+    
+    r1, h1, c1, c2, h2, r2 = (coords[idxs[i]].copy() for i in range(6))
+
+    # Consider the h1-c1-c2-h2 four-atom segment. To invert it's dihedral angle,
+    # e.g. from +80 to -80, we would rotate around the c1-c2 bond and calculate
+    # the new position of h2 (`new_h2` below). Then, we update the position
+    # of c1 and c2 by rotating around np.cross(v1, v2) so that the new_h2 point
+    # goes back to the original h2 position. Thus, h2 position remains unchanged.
+    angle_corners = dihedral(h1, c1, c2, h2)
+    new_h2 = np.dot(rotation_matrix(c2-c1, -2*angle_corners), h2-c2) + c2 
+    v1 = norm(new_h2-h1)
+    v2 = norm(h2-h1)
+    axis = np.cross(v1, v2)
+    angle = np.arccos(np.dot(v1, v2))
+    coords -= h1
+    coords = rotate_ring_atom(idxs[2], coords, axis, angle, substituents)
+    coords = rotate_ring_atom(idxs[3], coords, axis, angle, substituents)
+
+    # Rotate c1 and c2 around h1-h2 axis to restore the middle point
+    # between c1 and c2 to the original position
+    orig_mid_corner = (c1 + c2) / 2
+    new_mid_corner = (coords[idxs[2]] + coords[idxs[3]]) / 2 + h1
+    angle = dihedral(orig_mid_corner, h1, h2, new_mid_corner)
+    coords = rotate_ring_atom(idxs[2], coords, h1-h2, angle, substituents)
+    coords = rotate_ring_atom(idxs[3], coords, h1-h2, angle, substituents)
+    
+    # rotate h1 substituents over r1-h1 axis
+    angle = dihedral(r2, r1, h1, coords[idxs[2]]) - dihedral(r2, r1, h1, c1)
+    coords = rotate_ring_atom(idxs[1], coords, h1-r1, angle, substituents)
+    coords += h1
+
+    # rotate h2 substituents over r2-h2 axis
+    angle = dihedral(r1, r2, h2, coords[idxs[3]]) - dihedral(r1, r2, h2, c2)
+    coords = rotate_ring_atom(idxs[4], coords-h2, h2-r2, angle, substituents) + h2
+    
+    return coords
+
+def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likeliness_range=0.1):
+    if len(idxs) != 6:
+        raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs))) 
+    if calc_boat_likeliness(ringinfo) >= -2:
+        return [coords]
+
+    # all corners rotate in a chair-to-other-chair flip, bail out if any
+    # substituent leads back to a different ring atom ("bites own tail")
+    for idx in substituents:
+        for neigh_idx in substituents[idx]:
+            if substituents[idx][neigh_idx]["bites_own_tail"]:
+                return [coords]
+
+    starting_axial_likeliness = calc_axial_likeliness(substituents, coords)
+
+    # find best corner to flip based on alignment of rod-hinge vectors
+    # as well as the number of substituents on both corners
+    highest_flip_score = -1e10
+    for i in range(3):
+        c1 = idxs[i]
+        c2 = idxs[(i+3) % 6] 
+        dot = ringinfo.dot_edges[idxs[i]] # co-linearity of rod1-hinge1 and rod2-hinge2 axis
+        substituent_weight = 0.
+        for idx in [c1, c2]:
+            for neigh_idx in substituents[idx]:
+                sw = 1 + substituents[idx][neigh_idx]["nr_neighbors"]**2 / 3
+                substituent_weight -= 0.05 * sw # low priority relative to rod-hinge alignment
+        score = dot**2 + substituent_weight
+        if score > highest_flip_score:
+            best_index = i
+            highest_flip_score = score
+
+    a = coords[idxs[(best_index - 2) % 6]]
+    b = coords[idxs[(best_index - 1) % 6]]
+    c = coords[idxs[(best_index + 0) % 6]]
+    d = coords[idxs[(best_index + 1) % 6]]
+    e = coords[idxs[(best_index + 2) % 6]]
+    c2= coords[idxs[(best_index + 3) % 6]]
+    centroid = ringinfo.centroid[idxs[best_index]]
+    rotangle  = 2. * (math.pi-dihedral(centroid, b, d, c))
+    rotangle2 = 2. * (math.pi-dihedral(centroid, e, a, c2))
+    newpos = rotate_corner(idxs[best_index],           ringinfo, substituents, coords, rotangle)
+    newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
+    new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
+    if new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range:
+        return [newpos]
+    elif starting_axial_likeliness / new_axial_likeliness > 1.0 + axial_likeliness_range:
+        return [coords]
+    else:
+        return [coords, newpos]
+         
+
 
 def convert_boat_to_chair(mol, coords, idxs, debug):
 
     ringinfo = RingInfo(coords, idxs, debug)
+    if calc_boat_likeliness(ringinfo) < -2: # chair already
+        return coords
+
     substituents = get_substituents(mol, idxs)
     scores = []
     for i, idx in enumerate(idxs):
         opposite_corner_idx = idxs[(i + 3) % 6]
+        a_idx = idxs[(i - 2) % 6] # hinge1
         b_idx = idxs[(i - 1) % 6] # hinge1
         d_idx = idxs[(i + 1) % 6] # hinge2
+        e_idx = idxs[(i + 2) % 6] # hinge1
         opposite_upness = ringinfo.upness[opposite_corner_idx] 
         this_upness = ringinfo.upness[idx] 
         # About flip_score:
@@ -205,7 +349,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
     
     if debug:
         print("Starting boat_likeliness = %.3f" % calc_boat_likeliness(ringinfo))
-        print("Starting axial_score = %.3f" % calc_axial_likeliness(ringinfo, substituents, coords))
+        print("Starting axial_score = %.3f" % calc_axial_likeliness(substituents, coords))
 
     best_coords = coords.copy()
     best_score = float("inf")
@@ -213,11 +357,24 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         flip_score = scores[i]
         if flip_score < 0: # some mildly negative flip_scores may benefit from rotation
             continue
-    
-        newpos = unboatify_atom(idx, ringinfo, substituents, coords)
+
+        angle = dihedral(ringinfo.centroid[idx], coords[b_idx], coords[d_idx], coords[idx])
+        angle2 = dihedral(ringinfo.centroid[idx], coords[e_idx], coords[a_idx], coords[opposite_corner_idx])
+        if angle * angle2 < 0:
+            print('WARNING: expected angles of opposing corners to be of same signs')
+        
+        # if the starting angle is large (less than 150 deg) rotate to the
+        # inverse of that. Otherwise rotate to 150 deg (5 * pi / 6)
+        target_angle=3*math.pi/4
+        target_magnitude = min(abs(angle), target_angle)
+        rotangle = math.pi - abs(angle) + math.pi - target_magnitude
+        if angle2 < 0:
+            rotangle *= -1
+
+        newpos = rotate_corner(idx, ringinfo, substituents, coords, rotangle)
         new_info = RingInfo(newpos, idxs)
         new_boat_likeliness = calc_boat_likeliness(new_info)
-        new_axial_likeliness = calc_axial_likeliness(new_info, substituents, newpos)
+        new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
         score = new_boat_likeliness + new_axial_likeliness
         if score < best_score:
             best_coords = newpos
@@ -229,7 +386,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
 
     return best_coords
 
-def unboatify_atom(idx, ringinfo, substituents, coords, target_angle=3*math.pi/4):
+def rotate_corner(idx, ringinfo, substituents, coords, rotangle):
     coords = coords.copy()
     idx = ringinfo.indices.index(idx)
     c_idx = ringinfo.indices[idx]            # corner
@@ -243,45 +400,26 @@ def unboatify_atom(idx, ringinfo, substituents, coords, target_angle=3*math.pi/4
     d = coords[d_idx].copy() # hinge2
     c2 = coords[c2_idx].copy() # opposite corner
 
-    angle = ringinfo.angle[c_idx]
-    angle2 = ringinfo.angle[c2_idx]
-    if angle * angle2 < 0:
-        print('WARNING: expected angles of opposing corners to be of same signs')
-    
-    # if the starting angle is large (less than 150 deg) rotate to the
-    # inverse of that. Otherwise rotate to 150 deg (5 * pi / 6)
-    target_magnitude = min(abs(angle), target_angle)
-    rotangle = math.pi - abs(angle) + math.pi - target_magnitude
-    if angle2 < 0:
-        rotangle *= -1
-    hinge_axis = d - b
-    coords -= b
-    affected = set([c_idx])
-    for _, info in substituents[c_idx].items():
-        affected = affected.union(info["downstream_indices"])
-    for i in affected:
-        coords[i] = np.dot(rotation_matrix(hinge_axis, rotangle), coords[i])
+    coords = rotate_ring_atom(c_idx, coords-b, d - b, rotangle, substituents)
     newcorner = coords[c_idx] + b
 
     # rotate hinge1
     rotangle = dihedral(c2, a, b, newcorner) - dihedral(c2, a, b, c)
-    affected = set([b_idx])
-    for _, info in substituents[b_idx].items():
-        affected = affected.union(info["downstream_indices"])
-    for i in affected:
-        coords[i] = np.dot(rotation_matrix(b - a, rotangle), coords[i])
-    coords += b - d
+    coords = rotate_ring_atom(b_idx, coords, b - a, rotangle, substituents)
 
     # rotate hinge2
     rotangle = dihedral(c2, e, d, newcorner) - dihedral(c2, e, d, c)
-    affected = set([d_idx])
-    for _, info in substituents[d_idx].items():
-        affected = affected.union(info["downstream_indices"])
-    for i in affected:
-        coords[i] = np.dot(rotation_matrix(d - e, rotangle), coords[i])
+    coords = rotate_ring_atom(d_idx, coords-d+b, d - e, rotangle, substituents)
     coords += d
     return coords
 
+def rotate_ring_atom(index, coords, rotaxis, angle, substituents):
+    affected = set([index])
+    for _, info in substituents[index].items():
+        affected = affected.union(info["downstream_indices"])
+    for i in affected:
+        coords[i] = np.dot(rotation_matrix(rotaxis, angle), coords[i])
+    return coords
 
 def rotation_matrix(axis, theta):
     """
