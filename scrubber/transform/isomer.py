@@ -10,12 +10,11 @@ from rdkit.Chem.EnumerateStereoisomers import (
 
 from ..common import ScrubberBase, UniqueMoleculeContainer, mol2smi
 
-from .base import (
-    MoleculeTransformations,
-    MaxResultsException,
-    MaxIterException,
-    MolecularReactionsLogger,
-)
+from .base import MoleculeTransformations
+from .base import MaxResultsException
+from .base import MaxIterException
+from .base import MolecularReactionsLogger
+from .base import exhaustive_reaction
 
 
 # TODO add pro-chiral patterns?
@@ -622,3 +621,53 @@ if __name__ == "__main__":
             #         ),
             #     )
             # print("steps printed", idx + 1)
+
+
+def enumerate_tautomers(
+    mol,
+    reactions,
+    max_results: int = 50,
+    # keep_all: int = True, # TODO all tautomers must be kept?
+    protect_aromatic: bool = True,
+    protect_amide: bool = True,
+    verbose=False,
+) -> list:
+    """enumerate tautomers"""
+    # print("CALLED WITH", protect_aromatic, protect_amide )
+
+    def check_property_violation(pool, querymol):
+        """helper function to check for violations"""
+        count_list = [len(mol.GetSubstructMatches(querymol)) for mol in pool]
+        max_count = max(count_list)
+        delete = []
+        for idx, count in enumerate(count_list):
+            if count < max_count:
+                delete.append(idx)
+                #self.reaction_log.add(
+                #    pool[idx],
+                #    None,
+                #    "*** REJECTED *** aromatic decrease",
+                #    self._iterations,
+                #    kept=False,
+                #)
+                if verbose:
+                    print(
+                        "[VERBOSE] molecule [%s] rejected by %s count (current: %d | max %d)"
+                        % (mol2smi(results[idx]), Chem.MolToSmiles(querymol), count, max_count)
+                    )
+        pool.remove_from_indices(delete)
+
+    results = exhaustive_reaction(
+        mol,
+        reaction_list=reactions,
+        keep_all=True,
+        max_results=max_results,
+        reaction_log=None,
+        preserve_mol_properties=True,
+        verbose=verbose,
+    )
+    if verbose:
+        print("%d tautomers generated" % len(results))
+    check_property_violation(results, Chem.MolFromSmarts("[a]"))
+    check_property_violation(results, Chem.MolFromSmarts("[OX1,SX1]=[CX3][NX3]"))
+    return results

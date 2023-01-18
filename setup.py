@@ -27,7 +27,10 @@ setup(
     long_description=open(os.path.join(base_dir, "README.md")).read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    scripts=["scripts/scrub.py",],
+    scripts=[
+        "scripts/scrub.py",
+        "scripts/scrublite.py",
+    ],
     package_data={"scrubber": ["data/*"]},
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,

@@ -380,3 +380,117 @@ class MaxIterException(Exception):
     number of protomers generated"""
 
     pass
+
+
+def exhaustive_reaction(
+    mol,
+    reaction_list: list,
+    keep_all: bool = True,
+    max_results: int = 1000,
+    max_iter: int = 10000,
+    reaction_log=None,
+    preserve_mol_properties:bool=True,
+    verbose=False,
+) -> tuple:
+    """perform the RDKit reaction. The format of the reaction is [(rxn_id,
+    reaction)] This method processes the molecular pool (self.mol_pool) but
+    does not add results to it, letting the calling method to take care of
+    that (allowing for filtering etc.)
+    https://github.com/tentrillion/rdkit-tutorials/blob/master/notebooks/003_SMARTS_ReactionsExamples.ipynb
+
+    reaction_list               : list containing the RDKit reaction objects to be applied
+    keep_all                    :
+    preserve_mol_properties     : copy all molecular properties of the reagents into the generated molecules
+    """
+    # counter for the max_iter counting
+    _iter = 0
+    # results = UniqueMoleculeContainer()
+    reaction_products = UniqueMoleculeContainer()
+    consumed_reagents = UniqueMoleculeContainer()
+    visited = UniqueMoleculeContainer(ignore_chirality=True)
+    visited_pairs = set()
+    for rxn_idx, (rxn_pattern, rxn_obj) in enumerate(reaction_list):
+        print("outer loop in standalone exhaustive_reaction: %d %s" % (rxn_idx, rxn_pattern))
+        if not keep_all:
+            if len(reaction_products):
+                reagents_pool = reaction_products.copy()
+                reaction_products.clear()
+            else:
+                reagents_pool = UniqueMoleculeContainer([mol])
+            reagents_pool -= consumed_reagents
+        else:
+            reagents_pool = UniqueMoleculeContainer([mol])
+            reagents_pool += reaction_products
+            reaction_products.clear()
+            reagents_pool += consumed_reagents
+            # print("WE START FROM HERE", len(reagents_pool), reagents_pool[0], "\n",mol2smi(reagents_pool[0]))
+        if len(reagents_pool) > max_results:
+            print("WARNING: maximum number of results reached (%d)" % max_results)
+            break
+        # loop this reaction until either no reagents are left, or no products are generated
+        while True:
+            # reaction_products.sealed = True
+            for reagent in reagents_pool:
+                ###### MULTIPLICITY REDUCTION 1 (TO TEST)
+                if not (mol2smi(reagent, False),rxn_pattern) in visited_pairs:
+                    visited_pairs.add((mol2smi(reagent,False),rxn_pattern))
+                else:
+                    continue
+                _iter += 1
+                if _iter > max_iter:
+                    print("WARNING: maximum number of iterations reached (%d)" % _iter)
+                    break
+                products = rxn_obj.RunReactants((reagent,))
+                if verbose:
+                    print("ReactionId[%s]: %d products" %(rxn_idx, len(products)))
+                if len(products):
+                    consumed_reagents.add(reagent)
+                for p, *_ in products:
+                    # TODO add cache check here to check if discarded
+                    # molecules are going to be processed here
+                    try:
+                        Chem.SanitizeMol(p)
+                        # skip molecules that have been discarded already
+                        # if mol2smi(p,False) in self._discarded:
+                        #     continue
+                        ###### MULTIPLICITY REDUCTION 2 (TO TEST)
+                        if p in visited:
+                            continue
+                        visited.add(p)
+                        ###### MULTIPLICITY REDUCTION 3 (TO TEST)
+                        if not (p,rxn_pattern) in visited_pairs:
+                            visited_pairs.add((mol2smi(p,False),rxn_pattern))
+                        else:
+                            continue
+                        visited_pairs.add((p, rxn_pattern))
+                        ##############################################
+                        if preserve_mol_properties:
+                            copy_mol_properties(reagent, p, strict=False, include_name=True)
+                        reaction_products.add(PropertyMol(p))
+                        if not reaction_log is None:
+                            reaction_log.add(
+                                reagent,
+                                p,
+                                rxn_pattern,
+                                iteration=self._iterations,
+                            )
+                    except Chem.AtomValenceException:
+                        if verbose:
+                            print("[exhaustive enumeration] Product rejected: valence violation")
+                    except Chem.KekulizeException:
+                        if verbose:
+                            print("[exhaustive enumeration] Product rejected: kekule violation")
+                    # except Exception as error:
+                    #     print("\n\n", error)
+                    #     success = False
+            if len(reaction_products):
+                reagents_pool = UniqueMoleculeContainer(reaction_products)
+                reaction_products = UniqueMoleculeContainer()
+            else:
+                reaction_products = reagents_pool
+                break
+    if keep_all:
+        reagents_pool += consumed_reagents
+        reagents_pool += reaction_products
+    return reagents_pool
+
