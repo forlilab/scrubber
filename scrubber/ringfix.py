@@ -164,7 +164,7 @@ def calc_axial_likeliness(substituents, coords):
     return axial_likeliness
 
 
-def do_ring_things(mol, coords, debug=False):
+def fix_rings(mol, coords, debug=False):
     #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
     ring6_smarts = "[*]1[*][*][*][*][*]1"

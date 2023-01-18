@@ -4,15 +4,13 @@ from . import cli
 from . import core
 from . import storage
 from . import common
-from .protomer import parse_reaction_file
-from .protomer import parse_tautomers_config_file
-from .protomer import build_pka_reactions
-from .protomer import convert_recursive
-from .protomer import enumerate_pka
-from .protomer import enumerate_tautomers
-from .ringcorners import do_ring_things
-
-# from . import scrubmain
+from .protonate import parse_reaction_file
+from .protonate import parse_tautomers_config_file
+from .protonate import build_pka_reactions
+from .protonate import convert_recursive
+from .protonate import enumerate_pka
+from .protonate import enumerate_tautomers
+from .ringfix import fix_rings
 
 
 __all__ = [
@@ -26,4 +24,6 @@ __all__ = [
     "build_pka_reactions",
     "convert_recursive",
     "enumerate_pka",
+    "enumerate_tautomers",
+    "fix_rings",
 ]

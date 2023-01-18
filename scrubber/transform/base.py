@@ -3,7 +3,6 @@ from collections import defaultdict
 
 from rdkit import RDLogger
 from rdkit import Chem #, AtomValenceException, KekulizeException
-from rdkit.Chem import AllChem
 from rdkit.Chem.PropertyMol import PropertyMol
 
 from ..common import UniqueMoleculeContainer, mol2smi, copy_mol_properties
@@ -311,7 +310,63 @@ class MoleculeTransformations(object):
             reagents_pool += reaction_products
         return reagents_pool, True
 
- 
+    def _parse_reaction_file(self, datafile: str) -> tuple:
+        """parse a datafile by stripping comment and empty lines
+        that are passed to the function __parse_reaction_line method.
+        the line format is the following:
+                  *[ ]>>[ ]* [tag]
+
+        the first part must be a valid RDKit SMIRKS reaction or SMARTS
+        transformation, with or without spacing between the reaction pattern
+        (">>"), followed by a tag.
+
+        The tag can be a float value (the pKa of the protomer transformation), or the name of the transformation (tautomers)
+
+        The reaction is tested before being accepted
+        If a failed reaction is found, the code exits
+
+        """
+        reactions = []
+        # for a future GUI...
+        errors = []
+        with open(datafile, "r") as fp:
+            for idx, line in enumerate(fp.readlines()):
+                if line[0] == "#" or not line.strip():
+                    continue
+                try:
+                    rxn_obj, rxn_left, rxn_right, tag = self._parse_reaction_line(line)
+                    reactions.append((rxn_obj, rxn_left, rxn_right, tag))
+                # TODO convert to reaction failure exception
+                except Exception as exc:
+                    msg = "ERROR: invalid reaction definition at line [%d]:\n%s" % (
+                        idx,
+                        line,
+                    )
+                    errors.append(msg)
+        return reactions, errors
+
+    def _parse_reaction_line(self, line):
+        """parse a reaction string line
+        the line format is the following:
+                  *[ ]>>[ ]* [tag]
+
+        the first part must be a valid RDKit SMIRKS reaction or SMARTS
+        transformation, with or without spacing between the reaction pattern
+        (">>"), followed by a tag.
+
+        The tag can be a float value (the pKa of the protomer transformation),
+        or the name of the transformation (tautomers)
+
+        The reaction is tested before being accepted
+        If a failed reaction is found, the code exits
+        """
+        rxn_left, rxn_right = line.split(">>")
+        rxn_right, tag = rxn_right.split(None, 1)
+        tag = tag.strip()
+        rxn_string = "%s >> %s" % (rxn_left, rxn_right)
+        rxn_obj = Chem.AllChem.ReactionFromSmarts(rxn_string)
+        return rxn_obj, rxn_left, rxn_right, tag
+
 
 class MaxResultsException(Exception):
     """custom class to manage abrupt interruption of iterations due to maximum
@@ -325,8 +380,6 @@ class MaxIterException(Exception):
     number of protomers generated"""
 
     pass
-
-
 
 
 def exhaustive_reaction(

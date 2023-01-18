@@ -14,9 +14,7 @@ from .base import MoleculeTransformations
 from .base import MaxResultsException
 from .base import MaxIterException
 from .base import MolecularReactionsLogger
-#from .base import parse_reaction_file
 from .base import exhaustive_reaction
-#from .base import apply_reactions
 
 
 # TODO add pro-chiral patterns?
@@ -117,7 +115,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         self.__ph_model = {}
         if fname is None:
             fname = self.get_datafile(PH_DATAFILE)
-        reactions = parse_reaction_file(fname)
+        reactions, errors = self._parse_reaction_file(fname)
         for rxn, rxn_left, _, pKa in reactions:
             pKa = float(pKa)
             self.__ph_model[rxn_left] = [rxn, pKa]
@@ -132,7 +130,7 @@ class MoleculeIsomers(ScrubberBase, MoleculeTransformations):
         self.__tauto_model = {}
         if fname is None:
             fname = self.get_datafile(TAUTOMERS_DATAFILE)
-        reactions = parse_reaction_file(fname)
+        reactions, errors = self._parse_reaction_file(fname)
         for rxn, _, _, name in reactions:
             self.__tauto_model[name] = [rxn]
             if self.verbose:
