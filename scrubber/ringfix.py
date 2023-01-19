@@ -377,8 +377,9 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
 
         angle = dihedral(ringinfo.centroid[idx], coords[b_idx], coords[d_idx], coords[idx])
         angle2 = dihedral(ringinfo.centroid[idx], coords[e_idx], coords[a_idx], coords[opposite_corner_idx])
-        if angle * angle2 < 0:
-            print('WARNING: expected angles of opposing corners to be of same signs')
+        if debug:
+            if angle * angle2 < 0:
+                print('WARNING: expected angles of opposing corners to be of same signs')
         
         # if the starting angle is large (less than 150 deg) rotate to the
         # inverse of that. Otherwise rotate to 150 deg (5 * pi / 6)

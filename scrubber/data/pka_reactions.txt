@@ -1,6 +1,6 @@
 # format:
 #  SMARTS_acid >> SMARTS_base Name pKa
-[!c:1][CX3:2](=[O:3])[OH1+0:4] >> [1c:1][CX3:2](=[O:3])[O-:4] carboxylate 4.7
+[!c:1][CX3:2](=[O:3])[OH1+0:4] >> [!c:1][CX3:2](=[O:3])[O-:4] carboxylate 4.7
 [CX3:1](=[S:2])[OH1+0:3] >> [CX3:1](=[S:2])[O-:3] thio_carboxylate 3.4
 [c:1][CX3:2](=[O:3])[OH1+0:4] >> [c:1][CX3:2](=[O:3])[O-:4] aryl_carboxylate 4.2
 [c:1]1[c:2][nX3+0:3][c:4][nH1X3+1:5]1 >> [c:1]1[c:2][nX3+0:3][c:4][n+0X2:5]1 pyridine 5.25

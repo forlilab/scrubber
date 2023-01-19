@@ -8,17 +8,28 @@ import multiprocessing
 # from time import sleep
 # import sys
 import random
-
+import pathlib
 import time
 from rdkit.Chem.PropertyMol import PropertyMol
+from rdkit import Chem
+from rdkit.Chem import rdDistGeom
+from rdkit.Chem import rdForceFieldHelpers
+from rdkit.Geometry import Point3D
 
-from .storage import (
-    MoleculeProvider,
-    MoleculeStorage,
-    MoleculeIssueStorage,
-)
-from .geom.geometry import ParallelGeometryGenerator, GeometryGenerator
+from .storage import MoleculeProvider
+from .storage import MoleculeStorage
+from .storage import MoleculeIssueStorage
+from .geom.geometry import ParallelGeometryGenerator
+from .geom.geometry import GeometryGenerator
 from .transform.isomer import MoleculeIsomers
+from .protonate import parse_reaction_file 
+from .protonate import build_pka_reactions
+from .protonate import parse_tautomers_config_file
+from .protonate import enumerate_pka
+from .protonate import enumerate_tautomers
+from .common import UniqueMoleculeContainer
+from .ringfix import fix_rings
+
 
 """
 This file contains the core scrubber object
@@ -467,6 +478,54 @@ class ScrubberCore(object):
                 self.__recursive_dict_match(v, curr_target[k])
             else:
                 curr_target[k] = v
+
+class Scrub:
+
+    def __init__(
+        self,
+        ph_low=7.4,
+        ph_high=None,
+        pka_fname=None,
+        tauto_fname=None,
+    ):
+        datadir = pathlib.Path(__file__).parent / "data"
+        if pka_fname is None:
+            pka_fname = datadir / "pka_reactions.txt"
+        if tauto_fname is None:
+            tauto_fname = datadir / "tautomers.txt"
+        reactions = parse_reaction_file(pka_fname)
+        pka_reactions = build_pka_reactions(reactions)
+        tauto_reactions, keepmax_smarts = parse_tautomers_config_file(tauto_fname)
+        self.pka_reactions = pka_reactions
+        self.tauto_reactions = tauto_reactions
+        self.keepmax_smarts = keepmax_smarts
+        self.ph_low = ph_low
+        if ph_high is None:
+            ph_high = ph_low
+        self.ph_high = ph_high
+        self.etkdg_config = rdDistGeom.ETKDGv3()
+
+    def __call__(self, input_mol):
+        mol = Chem.RemoveHs(input_mol) 
+        molset = UniqueMoleculeContainer()
+        for mol_1 in enumerate_pka(mol, self.pka_reactions, self.ph_low, self.ph_high):
+            for mol_2 in enumerate_tautomers(mol_1, self.tauto_reactions, self.keepmax_smarts): 
+                molset.add(mol_2)
+        mol_list = []
+        for mol in molset:
+            mol.RemoveAllConformers()
+            mol = Chem.AddHs(mol)
+            rdDistGeom.EmbedMolecule(mol, self.etkdg_config)
+            etkdg_coords = mol.GetConformer().GetPositions()
+            mol.RemoveAllConformers()
+            for coords in fix_rings(mol, etkdg_coords):
+                c = Chem.Conformer(mol.GetNumAtoms())
+                for i, (x, y, z) in enumerate(coords):
+                    c.SetAtomPosition(i, Point3D(x, y, z))
+                mol.AddConformer(c, assignId=True)
+            rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
+            mol_list.append(mol)
+        return mol_list
 
 
 if __name__ == "__main__":
