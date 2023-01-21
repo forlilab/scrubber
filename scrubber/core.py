@@ -517,7 +517,6 @@ class Scrub:
                 for mol_out in self.tautomerizer(mol): 
                     molset.add(mol_out)
             pool = list(molset)
-        print("Nr mols to gen3d", len(pool))
         output_mol_list = []
         if self.do_gen3d:
             for mol in pool:
@@ -538,7 +537,6 @@ def gen3d(mol, no_ringfix=False):
         coords_list = [etkdg_coords]
     else:
         coords_list = fix_rings(mol, etkdg_coords)
-        print("nr coords", len(coords_list))
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):
