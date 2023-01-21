@@ -22,11 +22,8 @@ from .storage import MoleculeIssueStorage
 from .geom.geometry import ParallelGeometryGenerator
 from .geom.geometry import GeometryGenerator
 from .transform.isomer import MoleculeIsomers
-from .protonate import parse_reaction_file 
-from .protonate import build_pka_reactions
-from .protonate import parse_tautomers_config_file
-from .protonate import enumerate_pka
-from .protonate import enumerate_tautomers
+from .protonate import AcidBaseConjugator
+from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
 from .ringfix import fix_rings
 
@@ -487,45 +484,69 @@ class Scrub:
         ph_high=None,
         pka_fname=None,
         tauto_fname=None,
+        no_acidbase=False,
+        no_tautomers=False,
+        no_ringfix=False,
+        no_gen3d=False,
     ):
-        datadir = pathlib.Path(__file__).parent / "data"
-        if pka_fname is None:
-            pka_fname = datadir / "pka_reactions.txt"
-        if tauto_fname is None:
-            tauto_fname = datadir / "tautomers.txt"
-        reactions = parse_reaction_file(pka_fname)
-        pka_reactions = build_pka_reactions(reactions)
-        tauto_reactions, keepmax_smarts = parse_tautomers_config_file(tauto_fname)
-        self.pka_reactions = pka_reactions
-        self.tauto_reactions = tauto_reactions
-        self.keepmax_smarts = keepmax_smarts
+        self.acid_base_conjugator = AcidBaseConjugator()
+        self.tautomerizer = Tautomerizer()
         self.ph_low = ph_low
         if ph_high is None:
             ph_high = ph_low
         self.ph_high = ph_high
-        self.etkdg_config = rdDistGeom.ETKDGv3()
+        self.do_acidbase = not no_acidbase
+        self.do_tautomers = not no_tautomers
+        self.no_ringfix = no_ringfix # not avoid double negative to pass directly to gen3d
+        self.do_gen3d = not no_gen3d
 
     def __call__(self, input_mol):
         mol = Chem.RemoveHs(input_mol) 
-        molset = UniqueMoleculeContainer()
-        for mol_1 in enumerate_pka(mol, self.pka_reactions, self.ph_low, self.ph_high):
-            for mol_2 in enumerate_tautomers(mol_1, self.tauto_reactions, self.keepmax_smarts): 
-                molset.add(mol_2)
-        mol_list = []
-        for mol in molset:
-            mol.RemoveAllConformers()
-            mol = Chem.AddHs(mol)
-            rdDistGeom.EmbedMolecule(mol, self.etkdg_config)
-            etkdg_coords = mol.GetConformer().GetPositions()
-            mol.RemoveAllConformers()
-            for coords in fix_rings(mol, etkdg_coords):
-                c = Chem.Conformer(mol.GetNumAtoms())
-                for i, (x, y, z) in enumerate(coords):
-                    c.SetAtomPosition(i, Point3D(x, y, z))
-                mol.AddConformer(c, assignId=True)
-            rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
-            mol_list.append(mol)
-        return mol_list
+        pool = [input_mol]
+
+        if self.do_acidbase:
+            molset = UniqueMoleculeContainer()
+            for mol in pool:
+                for mol_out in self.acid_base_conjugator(mol, self.ph_low, self.ph_high):
+                    molset.add(mol_out)
+            pool = list(molset)
+
+        if self.do_tautomers:
+            molset = UniqueMoleculeContainer()
+            for mol in pool:
+                for mol_out in self.tautomerizer(mol): 
+                    molset.add(mol_out)
+            pool = list(molset)
+        print("Nr mols to gen3d", len(pool))
+        output_mol_list = []
+        if self.do_gen3d:
+            for mol in pool:
+                mol_out = gen3d(mol, no_ringfix=self.no_ringfix)
+                output_mol_list.append(mol_out)
+
+        return output_mol_list
+
+etkdg_config = rdDistGeom.ETKDGv3()
+
+def gen3d(mol, no_ringfix=False):
+    mol.RemoveAllConformers()
+    mol = Chem.AddHs(mol)
+    rdDistGeom.EmbedMolecule(mol, etkdg_config)
+    etkdg_coords = mol.GetConformer().GetPositions()
+    mol.RemoveAllConformers()
+    if no_ringfix:
+        coords_list = [etkdg_coords]
+    else:
+        coords_list = fix_rings(mol, etkdg_coords)
+        print("nr coords", len(coords_list))
+    for coords in coords_list:
+        c = Chem.Conformer(mol.GetNumAtoms())
+        for i, (x, y, z) in enumerate(coords):
+            c.SetAtomPosition(i, Point3D(x, y, z))
+        mol.AddConformer(c, assignId=True)
+    rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
+    return mol
+
 
 
 if __name__ == "__main__":

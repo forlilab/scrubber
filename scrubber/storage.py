@@ -579,6 +579,7 @@ class SMIMolSupplierWrapper(object):
             self.fp_errors.close()
 
     def __iter__(self):
+        self.fp_input.seek(0)
         return self
 
     def __next__(self):
@@ -588,7 +589,7 @@ class SMIMolSupplierWrapper(object):
             if self.titleLine and not self._first_line:
                 self._first_line = True
                 continue
-            # empty line
+            # readline() returns "" at the end of file, "\n" for empty lines in the file
             if not line:
                 self.fp_input.close()
                 if not self.fp_errors is None:

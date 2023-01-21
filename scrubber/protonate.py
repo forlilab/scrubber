@@ -1,70 +1,134 @@
+import pathlib
 from .common import UniqueMoleculeContainer
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 
-from rdkit.Chem import rdMolInterchange
+datadir = pathlib.Path(__file__).parents[0] / "data"
 
-def parse_reaction_file(datafile: str) -> list:
-    """parse a datafile by stripping comment and empty lines
-    that are passed to the function __parse_reaction_line method.
-    the line format is the following:
-              *[ ]>>[ ]* [tag]
+class AcidBaseConjugator:
+    def __init__(self, pka_reactions=None):
+        if pka_reactions is None: 
+            pka_reactions = self.parse_reaction_file(datadir / "pka_reactions.txt") 
+        self.pka_reactions = pka_reactions
 
-    the first part must be a valid RDKit SMIRKS reaction or SMARTS
-    transformation, with or without spacing between the reaction pattern
-    (">>"), followed by a tag.
+    def __call__(self, input_mol, ph_range_low, ph_range_high):
+        if ph_range_low > ph_range_high:
+            raise ValueError("ph_range_low must be lesser than or equal to ph_range_high")
+        mol_list = [input_mol]
+        for r in self.pka_reactions:
+            if ph_range_high < r["pka"]:
+                mol_list = [convert_exhaustive(mol, r["rxn_gain_h"]) for mol in mol_list]
+            elif ph_range_low > r["pka"]:
+                mol_list = [convert_exhaustive(mol, r["rxn_lose_h"]) for mol in mol_list]
+            else: # keep both states for each transformation
+                tmp = UniqueMoleculeContainer()
+                for mol in mol_list:
+                    tmp.add(mol)
+                    convert_recursive(mol, r["rxn_gain_h"], tmp)
+                    convert_recursive(mol, r["rxn_lose_h"], tmp)
+                mol_list = [mol for mol in tmp]
+        for mol in mol_list:
+            copy_mol_props(input_mol, mol)
+        return mol_list
 
-    The tag can be a float value (the pKa of the protomer transformation), or the name of the transformation (tautomers)
+    @classmethod
+    def from_reactions_filename(cls, fname):
+        pka_reactions = cls.parse_reaction_file(fname)
+        return cls(pka_reactions) 
+        
+    @staticmethod
+    def parse_reaction_file(datafile: str) -> list:
+        """the line format is the following:
+               SMARTS >> SMARTS NAME PKA_VALUE
+           the space between SMARTS and >> is optional
+        """
+        reactions = []
+        name_set = set()
+        with open(datafile, "r") as fp:
+            for line in fp:
+                line = line.strip()
+                if len(line) == 0 or line[0] == "#":
+                    continue
+                rxn_left, rxn_right = line.split(">>")
+                rxn_right, name, pka = rxn_right.split()
+                if name in name_set:
+                    raise ValueError("reaction name must be unique") 
+                name_set.add(name)
+                r = {}
+                r["name"] = name
+                r["pka"] = float(pka)
+                r["rxn_lose_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_left, rxn_right))
+                r["rxn_gain_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_right, rxn_left))
+                reactions.append(r)
+        return reactions
 
-    """
-    reactions = []
-    with open(datafile, "r") as fp:
-        for line in fp:
-            line = line.strip()
-            if len(line) == 0 or line[0] == "#":
-                continue
-            rxn_left, rxn_right = line.split(">>")
-            rxn_right, tag = rxn_right.split(maxsplit=1)
-            tag = tag.strip()
-            #rxn_string = "%s >> %s" % (rxn_left, rxn_right)
-            #rxn_obj = Chem.AllChem.ReactionFromSmarts(rxn_string)
-            #reactions.append((rxn_obj, rxn_left, rxn_right, tag))
-            reactions.append((rxn_left, rxn_right, tag))
-    return reactions
 
-def parse_tautomers_config_file(fname):
-    reactions = []
-    keepmax_smarts = []
-    with open(fname) as f:
-        for line in f:
-            line = line.strip()
-            if len(line) == 0 or line[0] == "#":
-                continue
-            if line.startswith("KEEPMAX_SMARTS"):
-                _, smarts, name = line.split()
-                keepmax_smarts.append({"smarts": smarts, "name": name})
-            else:
-                smirks, name = line.split()
-                reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name})
-    return reactions, keepmax_smarts
+class Tautomerizer:
+    def __init__(self, reactions=None, keepmax_smarts=None, nr_rounds=2):
+        if reactions is None:
+            reactions, _ = self.parse_tautomers_config_file(datadir / "tautomers.txt") 
+        if keepmax_smarts is None:
+            _, keepmax_smarts = self.parse_tautomers_config_file(datadir / "tautomers.txt") 
+        self.reactions = reactions
+        self.keepmax_smarts = keepmax_smarts
+        self.nr_rounds = nr_rounds
+
+    @classmethod
+    def from_reactions_filename(cls, filename, nr_rounds=2):
+        reactions, keepmax_smarts = cls.parse_tautomers_config_file(filename)
+        return cls(reactions, keepmax_smarts, nr_rounds)
+
+    def __call__(self, input_mol):
+        tautomers = UniqueMoleculeContainer([input_mol])
+        for roundid in range(self.nr_rounds):
+            tmp = UniqueMoleculeContainer()
+            for mol in tautomers:
+                for r in self.reactions:
+                    uniq = UniqueMoleculeContainer()
+                    products = react_and_sanitize(mol, r["rxn"])
+                    for product in products:
+                        tmp.add(product)
+            for mol in tmp:
+                tautomers.add(mol)
+    
+        # count occurences of each SMARTS
+        smarts_count = [[0]*len(tautomers) for _ in self.keepmax_smarts]
+        for i, smarts in enumerate(self.keepmax_smarts):
+            smarts_mol = Chem.MolFromSmarts(smarts["smarts"])
+            for j, mol in enumerate(tautomers):
+                smarts_count[i][j] = len(mol.GetSubstructMatches(smarts_mol))
+    
+        # select tautomers that have the max count of each SMARTS
+        max_of_all_counts = False # fewer tautomers if set to True
+        is_selected = [True] * len(tautomers)
+        for count in smarts_count:
+            current_max = max([count[i] for i in range(len(tautomers)) if is_selected[i] or max_of_all_counts])
+            for j in range(len(tautomers)):
+                is_selected[j] = is_selected[j] and (count[j] == current_max)
+        
+        output = [tautomers[j] for j in range(len(tautomers)) if is_selected[j]]
+        for mol in output:
+            copy_mol_props(input_mol, mol)
+        return output
+
+    @staticmethod
+    def parse_tautomers_config_file(fname):
+        reactions = []
+        keepmax_smarts = []
+        with open(fname) as f:
+            for line in f:
+                line = line.strip()
+                if len(line) == 0 or line[0] == "#":
+                    continue
+                if line.startswith("KEEPMAX_SMARTS"):
+                    _, smarts, name = line.split()
+                    keepmax_smarts.append({"smarts": smarts, "name": name})
+                else:
+                    smirks, name = line.split()
+                    reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name})
+        return reactions, keepmax_smarts
             
-
-def build_pka_reactions(reactions):
-    pka_reactions = []
-    name_set = set()
-    for (rxn_left, rxn_right, tag) in reactions:
-        name, pka = tag.split()
-        if name in name_set:
-            raise ValueError("reaction name must be unique") 
-        name_set.add(name)
-        r = {}
-        r["name"] = name
-        r["pka"] = float(pka)
-        r["rxn_lose_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_left, rxn_right))
-        r["rxn_gain_h"] = AllChem.ReactionFromSmarts("%s >> %s" % (rxn_right, rxn_left))
-        pka_reactions.append(r)
-    return pka_reactions
 
 def react_and_sanitize(mol, rxn):
     nr_react = rxn.GetNumReactantTemplates()
@@ -89,18 +153,15 @@ def react_and_sanitize(mol, rxn):
         except Exception as e:
             print("uncought exception", e, type(e))
             continue
-        #print(product)
-        #print(rdMolInterchange.MolToJSON(product))
-        #print("-->", Chem.MolToSmiles(product), product)
-        #print("-->", Chem.MolToSmiles(Chem.RemoveHs(product)))
-        #print()
         output_products.append(product)
     return output_products
+
 
 def convert_recursive(mol, rxn, container):
     for product in react_and_sanitize(mol, rxn):
         container.add(product)
         convert_recursive(product, rxn, container)
+
 
 def convert_exhaustive(mol, rxn):
     """
@@ -137,25 +198,6 @@ def convert_exhaustive(mol, rxn):
         raise RuntimeError("RunReactants(maxProducts=1) returned %d products" % len(products_list))
 
 
-def enumerate_pka(mol, pka_reactions, ph_range_low, ph_range_high):
-    if ph_range_low > ph_range_high:
-        raise ValueError("ph_range_low must be lesser than or equal to ph_range_high")
-    mol_list = [mol]
-    for r in pka_reactions:
-        if ph_range_high < r["pka"]:
-            mol_list = [convert_exhaustive(mol, r["rxn_gain_h"]) for mol in mol_list]
-        elif ph_range_low > r["pka"]:
-            mol_list = [convert_exhaustive(mol, r["rxn_lose_h"]) for mol in mol_list]
-        else: # keep both states for each transformation
-            tmp = UniqueMoleculeContainer()
-            for mol in mol_list:
-                tmp.add(mol)
-                convert_recursive(mol, r["rxn_gain_h"], tmp)
-                convert_recursive(mol, r["rxn_lose_h"], tmp)
-            mol_list = [mol for mol in tmp]
-    return mol_list
-
-
 def enumerate_pka_fewer_combos(mol, pka_reactions, ph_range_low, ph_range_high):
     """ if the pka of a reaction is between ph_range_low and pk_range_high, and the
         molecule has multiple substructures that are affected by the reaction,
@@ -182,36 +224,8 @@ def enumerate_pka_fewer_combos(mol, pka_reactions, ph_range_low, ph_range_high):
         mol_set = [mol for mol in tmp]
     return mol_set
 
-def enumerate_tautomers(mol, tauto_reactions, keepmax_smarts, nr_rounds=2):
-    tautomers = UniqueMoleculeContainer([mol])
-    for roundid in range(nr_rounds):
-        tmp = UniqueMoleculeContainer()
-        for mol in tautomers:
-            for r in tauto_reactions:
-                uniq = UniqueMoleculeContainer()
-                products = react_and_sanitize(mol, r["rxn"])
-                for product in products:
-                    tmp.add(product)
-        for mol in tmp:
-            tautomers.add(mol)
-
-    # count occurences of each SMARTS
-    smarts_count = [[0]*len(tautomers) for _ in keepmax_smarts]
-    for i, smarts in enumerate(keepmax_smarts):
-        smarts_mol = Chem.MolFromSmarts(smarts["smarts"])
-        for j, mol in enumerate(tautomers):
-            smarts_count[i][j] = len(mol.GetSubstructMatches(smarts_mol))
-
-    # select tautomers that have the max count of each SMARTS
-    max_of_all_counts = False # fewer tautomers if set to True
-    is_selected = [True] * len(tautomers)
-    for count in smarts_count:
-        current_max = max([count[i] for i in range(len(tautomers)) if is_selected[i] or max_of_all_counts])
-        for j in range(len(tautomers)):
-            is_selected[j] = is_selected[j] and (count[j] == current_max)
-    
-    output = [tautomers[j] for j in range(len(tautomers)) if is_selected[j]]
-    return output
-            
-        
-                
+def copy_mol_props(original_mol, target_mol):
+    if original_mol.HasProp("_Name"):
+        target_mol.SetProp("_Name", original_mol.GetProp("_Name"))
+    for prop_name in original_mol.GetPropNames():
+        target_mol.SetProp(prop_name, original_mol.GetProp(prop_name))
