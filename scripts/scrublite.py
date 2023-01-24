@@ -9,7 +9,10 @@ from scrubber import Scrub
 from scrubber import SMIMolSupplierWrapper
 
 from rdkit import Chem
+from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
+
+RDLogger.DisableLog("rdApp.*")
 
 try:
     import h5py
@@ -151,13 +154,20 @@ counter_supplied = 0
 counter_input_mols = 0
 counter_isomers = 0
 counter_conformers = 0
+counter_failed = 0
 with Writer(args.out_fname) as w:
     for input_mol in supplier:
         counter_supplied += 1
         if input_mol is None:
             continue
         counter_input_mols += 1
-        isomer_list = scrub(input_mol)
+        try:
+            isomer_list = scrub(input_mol)
+        except Exception as e:
+            counter_failed += 1
+            print("scrub failed for input mol %d" % (counter_supplied))
+            print(e)
+            continue
         w.write_mols(isomer_list)
         counter_isomers += len(isomer_list)
         counter_conformers += sum([mol.GetNumConformers() for mol in isomer_list])
