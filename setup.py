@@ -29,7 +29,6 @@ setup(
     packages=find_packages(),
     scripts=[
         "scripts/scrub.py",
-        "scripts/scrublite.py",
     ],
     package_data={"scrubber": ["data/*"]},
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
