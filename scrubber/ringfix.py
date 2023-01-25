@@ -142,6 +142,25 @@ def calc_axial_likeliness_old(ringinfo, substituents, coords):
             axial_likeliness += weight * abs(dot)
     return axial_likeliness
 
+def calc_anomeric_penalty(mol, substituents, coords):
+    pattern = Chem.MolFromSmarts("[*]-[OX2,SX2]-[CX4]-[OX2,SX2,#9,#17,#35,#53]")
+    matches = mol.GetSubstructMatches(pattern)
+    penalty = 0.
+    for i,j,k,l in matches:
+        if (
+            i in substituents and
+            j in substituents and
+            k in substituents
+        ):
+            angle = dihedral(coords[i], coords[j], coords[k], coords[l])
+            k1 = -0.5
+            k2 = 2.0
+            k3 = 1.5
+            penalty += k1 * (1.0 + math.cos(1 * angle))
+            penalty += k2 * (1.0 + math.cos(2 * angle))
+            penalty += k3 * (1.0 + math.cos(3 * angle))
+    return penalty
+
 def calc_axial_likeliness(substituents, coords):
     axial_likeliness = 0.
     centroid = np.mean([coords[j] for j in substituents], axis=0)
@@ -205,7 +224,7 @@ def fix_rings(mol, coords, debug=False):
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -274,7 +293,7 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     else:
         return [input_coords, coords]
 
-def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likeliness_range=0.1):
+def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_likeliness_range=0.1):
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs))) 
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -288,6 +307,7 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likelin
                 return [coords]
 
     starting_axial_likeliness = calc_axial_likeliness(substituents, coords)
+    starting_axial_likeliness = calc_anomeric_penalty(mol, substituents, coords)
 
     # find best corner to flip based on alignment of rod-hinge vectors
     # as well as the number of substituents on both corners
@@ -318,6 +338,7 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, axial_likelin
     newpos = rotate_corner(idxs[best_index],           ringinfo, substituents, coords, rotangle)
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
+    new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
     if starting_axial_likeliness < 0.05 and new_axial_likeliness < 0.05: # no subs?
         return [coords]
     elif new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range:
@@ -393,7 +414,8 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         new_info = RingInfo(newpos, idxs)
         new_boat_likeliness = calc_boat_likeliness(new_info)
         new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
-        score = new_boat_likeliness + new_axial_likeliness
+        new_anomeric_penalty = calc_anomeric_penalty(mol, substituents, newpos)
+        score = new_boat_likeliness + new_axial_likeliness + new_anomeric_penalty
         if score < best_score:
             best_coords = newpos
             best_score = score
