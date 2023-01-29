@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import multiprocessing
 import pathlib
 import sys
 
@@ -72,10 +73,17 @@ class HDF5Writer:
         self.counter_mol_group += 1
 
 
-def get_info_str():
+def get_info_str(counter=None):
+    if counter is not None:
+        counter_supplied =   counter["supplied"]
+        counter_input_mols = counter["input_mols"]
+        counter_isomers =    counter["isomers"]
+        counter_conformers = counter["conformers"]
+        counter_failed =     counter["failed"]
+
     s = ""
-    s += "Input molecules processed: %d, skipped by rdkit: %d\n" % (
-            counter_input_mols, counter_supplied - counter_input_mols)
+    s += "Input molecules processed: %d, skipped by rdkit: %d, failed: %d\n" % (
+            counter_input_mols, counter_supplied - counter_input_mols, counter_failed)
     s += "nr isomers (tautomers and acid/base conjugates): %d (avg. %.3f per mol)\n" % (
             counter_isomers, counter_isomers/counter_input_mols)
     s += "nr conformers:  %d (avg. %.3f per isomer, %.3f per mol)\n" % (
@@ -95,6 +103,7 @@ parser.add_argument("--no_acidbase", help="skip enumeration of acid/base conjuga
 parser.add_argument("--no_tautomers", help="skip enumeration of tautomers", action="store_true")
 parser.add_argument("--no_ringfix", help="skip fixes of six-member rings", action="store_true")
 parser.add_argument("--no_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
+parser.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
 args = parser.parse_args()
 
 if args.ph_low is None and args.ph_high is None:
@@ -155,25 +164,50 @@ counter_input_mols = 0
 counter_isomers = 0
 counter_conformers = 0
 counter_failed = 0
-with Writer(args.out_fname) as w:
-    for input_mol in supplier:
-        counter_supplied += 1
-        if input_mol is None:
-            continue
-        counter_input_mols += 1
-        try:
-            isomer_list = scrub(input_mol)
-        except Exception as e:
-            counter_failed += 1
-            print("scrub failed for input mol %d" % (counter_supplied))
-            print(e)
-            continue
+
+counter = {
+    "supplied": 0,
+    "input_mols": 0,
+    "isomers": 0,
+    "conformers": 0,
+    "failed": 0,
+}
+
+def scrub_wrap(input_mol):
+    if input_mol is None:
+        return None, 1
+    try:
+        return scrub(input_mol), 0
+    except Exception as e:
+        return None, e
+
+def write_and_log(isomer_list, output_code, counter):
+    counter["supplied"] += 1
+    counter["input_mols"] += output_code != 1
+    if type(output_code) != int:
+        counter["failed"] += 1
+        print(output_code, file=sys.stderr)
+    if isomer_list is not None:
         w.write_mols(isomer_list)
-        counter_isomers += len(isomer_list)
-        counter_conformers += sum([mol.GetNumConformers() for mol in isomer_list])
-        if counter_supplied % 100 == 0:
+        counter["isomers"] += len(isomer_list)
+        counter["conformers"] += sum([mol.GetNumConformers() for mol in isomer_list])
+        if counter["supplied"] % 100 == 0:
             print("Scrub in progress. Here's how things are going:")
-            print(get_info_str())
+            print(get_info_str(counter))
+
+with Writer(args.out_fname) as w:
+    if args.cpu == 1:
+        for input_mol in supplier:
+            isomer_list, out = scrub_wrap(input_mol)
+            write_and_log(isomer_list, out, counter)
+    else:
+        if args.cpu < 1:
+            nr_proc = multiprocessing.cpu_count()
+        else:
+            nr_proc = args.cpu
+        p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
+        for isomer_list, out in p.imap_unordered(scrub_wrap, supplier):
+            write_and_log(isomer_list, out, counter)
 
 print("Scrub completed.\nSummary of what happened:")
-print(get_info_str(), end="")
+print(get_info_str(counter), end="")
