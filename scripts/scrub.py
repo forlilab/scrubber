@@ -36,16 +36,43 @@ class SDWriter:
     def __exit__(self, *args):
         self.rdkit_sdwriter.close()
 
-    def write_mols(self, mol_group):
-        for mol in mol_group:
-            for i, conf in enumerate(mol.GetConformers()):
+    def write_mols(self, mol_group, add_suffix=False):
+
+        if add_suffix and len(mol_group) > 0:
+            if mol_group[0].HasProp("_Name"):
+                name = mol_group[0].GetProp("_Name") # assumes all mols have same name, which they should
+            else:
+                name = ""
+        nr_isomers = len(isomer_list)
+        for i, mol in enumerate(mol_group):
+            nr_confs = mol.GetNumConformers()
+            for j, conf in enumerate(mol.GetConformers()):
                 mol.SetProp("ScrubInfo", json.dumps({
-                    "group_id": self.counter_mol_group,
-                    "conformer": i,
+                    "isomerGroup": self.counter_mol_group,
+                    "isomerId": i,
+                    "confId": j,
                     "nr_conformers:":  mol.GetNumConformers(),
+                    "nr_isomers:":  len(mol_group),
                 }))
-                self.rdkit_sdwriter.write(mol, confId=i)
+                if add_suffix:
+                    if nr_isomers > 1 and nr_confs > 1:
+                        suffix = "_i%d-c%d" % (i, j)
+                    elif nr_isomers > 1 and nr_confs <= 1:
+                        suffix = "_i%d" % i
+                    elif nr_isomers <= 1 and nr_confs > 1:
+                        suffix = "_c%d" % j
+                    else:
+                        suffix = ""
+                    mol.SetProp("_Name", name + suffix)
+                self.rdkit_sdwriter.write(mol, confId=j)
         self.counter_mol_group += 1
+
+
+def suffix_iter(isomer_list):
+    if self.do_name_suffixes:
+        for i, mol in enumerate(isomer_list):
+            mol.SetProp("_Name", name + suffix)
+
 
 class HDF5Writer:
 
@@ -63,8 +90,18 @@ class HDF5Writer:
     def __exit__(self, *args):
         self.h5file.close()
 
-    def write_mols(self, mol_group):
+    def write_mols(self, mol_group, add_suffix=False):
         for mol in mol_group:
+            if add_suffix:
+                if mol.HasProp("_Name"):
+                    name = mol.GetProp("_Name")
+                else:
+                    name = ""
+                if len(mol_group) > 1:
+                    suffix = "_i%d" % len(mol_group)
+                else:
+                    suffix = ""
+                mol.SetProp("_Name", name + suffix)
             index = self.mols.shape[0]
             self.mols.resize((index + 1, ))
             self.mols[index] = rdMolInterchange.MolToJSON(mol)
@@ -75,34 +112,39 @@ class HDF5Writer:
 
 def get_info_str(counter=None):
     if counter is not None:
-        counter_supplied =   counter["supplied"]
-        counter_input_mols = counter["input_mols"]
-        counter_isomers =    counter["isomers"]
+        counter_supplied   = counter["supplied"]
+        counter_rdkit_nope = counter["rdkit_nope"]
+        counter_ok_mols    = counter["ok_mols"]
+        counter_isomers    = counter["isomers"]
         counter_conformers = counter["conformers"]
-        counter_failed =     counter["failed"]
+        counter_failed     = counter["failed"]
 
     s = ""
-    s += "Input molecules processed: %d, skipped by rdkit: %d, failed: %d\n" % (
-            counter_input_mols, counter_supplied - counter_input_mols, counter_failed)
+    s += "Input molecules supplied: %d\n" % counter_supplied
+    s += "mols processed: %d, skipped by rdkit: %d, failed: %d\n" % (
+            counter_ok_mols, counter_rdkit_nope, counter_failed)
+    if counter_ok_mols == 0:
+        return s
     s += "nr isomers (tautomers and acid/base conjugates): %d (avg. %.3f per mol)\n" % (
-            counter_isomers, counter_isomers/counter_input_mols)
+            counter_isomers, counter_isomers/counter_ok_mols)
     s += "nr conformers:  %d (avg. %.3f per isomer, %.3f per mol)\n" % (
             counter_conformers,
             counter_conformers/counter_isomers,
-            counter_conformers/counter_input_mols)
+            counter_conformers/counter_ok_mols)
     return s
 
 
 parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates")
 parser.add_argument("input", help="input filename (.sdf/.mol/.smi) or SMILES string")
 parser.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
+parser.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
 parser.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
 parser.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", type=float)
 parser.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
-parser.add_argument("--no_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
-parser.add_argument("--no_tautomers", help="skip enumeration of tautomers", action="store_true")
-parser.add_argument("--no_ringfix", help="skip fixes of six-member rings", action="store_true")
-parser.add_argument("--no_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
+parser.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
+parser.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
+parser.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
+parser.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 parser.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
 args = parser.parse_args()
 
@@ -134,9 +176,12 @@ else:
     supplier = [mol]
 
 # output
+do_gen2d = False # if output SDF and skip_gen3d, we will need 2D conformers
 extension = pathlib.Path(args.out_fname).suffix
 if extension == ".sdf":
     Writer = SDWriter
+    if args.skip_gen3d:
+        do_gen2d = True
 elif extension == ".hdf5":
     if _got_h5py:
         Writer = HDF5Writer
@@ -153,61 +198,64 @@ scrub = Scrub(
     ph_high,
     pka_fname=None,
     tauto_fname=None,
-    no_acidbase=args.no_acidbase,
-    no_tautomers=args.no_tautomers,
-    no_ringfix=args.no_ringfix,
-    no_gen3d=args.no_gen3d,
+    skip_acidbase=args.skip_acidbase,
+    skip_tautomers=args.skip_tautomers,
+    skip_ringfix=args.skip_ringfix,
+    skip_gen3d=args.skip_gen3d,
+    do_gen2d=do_gen2d,
+    name_from_prop=args.name_from_prop,
 )
 
 counter_supplied = 0
-counter_input_mols = 0
+counter_ok_mols = 0
 counter_isomers = 0
 counter_conformers = 0
 counter_failed = 0
 
 counter = {
     "supplied": 0,
-    "input_mols": 0,
+    "rdkit_nope": 0,
+    "ok_mols": 0,
     "isomers": 0,
     "conformers": 0,
     "failed": 0,
 }
 
-def scrub_wrap(input_mol):
-    if input_mol is None:
-        return None, 1
-    try:
-        return scrub(input_mol), 0
-    except Exception as e:
-        return None, e
-
-def write_and_log(isomer_list, output_code, counter):
+def write_and_log(isomer_list, log, counter):
     counter["supplied"] += 1
-    counter["input_mols"] += output_code != 1
-    if type(output_code) != int:
-        counter["failed"] += 1
-        print(output_code, file=sys.stderr)
-    if isomer_list is not None:
-        w.write_mols(isomer_list)
+    if log["input_mol_none"]:
+        counter["rdkit_nope"] += 1
+    elif len(isomer_list):
+        try:
+            w.write_mols(isomer_list, add_suffix=True)
+            counter["ok_mols"] += 1
+        except Exception as e:
+            print(e, file=sys.stderr)
+            counter["failed"] += 1
+            return
         counter["isomers"] += len(isomer_list)
         counter["conformers"] += sum([mol.GetNumConformers() for mol in isomer_list])
         if counter["supplied"] % 100 == 0:
             print("Scrub in progress. Here's how things are going:")
             print(get_info_str(counter))
+    else:
+        counter["failed"] += 1
+        if "exception" in log:
+            print(log["exception"], file=sys.stderr)
 
 with Writer(args.out_fname) as w:
     if args.cpu == 1:
         for input_mol in supplier:
-            isomer_list, out = scrub_wrap(input_mol)
-            write_and_log(isomer_list, out, counter)
+            isomer_list, log = scrub(input_mol)
+            write_and_log(isomer_list, log, counter)
     else:
         if args.cpu < 1:
             nr_proc = multiprocessing.cpu_count()
         else:
             nr_proc = args.cpu
         p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
-        for isomer_list, out in p.imap_unordered(scrub_wrap, supplier):
-            write_and_log(isomer_list, out, counter)
+        for (isomer_list, log) in p.imap_unordered(scrub, supplier):
+            write_and_log(isomer_list, log, counter)
 
 print("Scrub completed.\nSummary of what happened:")
 print(get_info_str(counter), end="")

@@ -12,6 +12,7 @@ import pathlib
 import time
 from rdkit.Chem.PropertyMol import PropertyMol
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem import rdDistGeom
 from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Geometry import Point3D
@@ -484,10 +485,12 @@ class Scrub:
         ph_high=None,
         pka_fname=None,
         tauto_fname=None,
-        no_acidbase=False,
-        no_tautomers=False,
-        no_ringfix=False,
-        no_gen3d=False,
+        skip_acidbase=False,
+        skip_tautomers=False,
+        skip_ringfix=False,
+        skip_gen3d=False,
+        do_gen2d=False,
+        name_from_prop=None,
     ):
         self.acid_base_conjugator = AcidBaseConjugator()
         self.tautomerizer = Tautomerizer()
@@ -495,12 +498,37 @@ class Scrub:
         if ph_high is None:
             ph_high = ph_low
         self.ph_high = ph_high
-        self.do_acidbase = not no_acidbase
-        self.do_tautomers = not no_tautomers
-        self.no_ringfix = no_ringfix # not avoid double negative to pass directly to gen3d
-        self.do_gen3d = not no_gen3d
+        self.do_acidbase = not skip_acidbase
+        self.do_tautomers = not skip_tautomers
+        self.skip_ringfix = skip_ringfix # not avoiding negative to pass directly to gen3d
+        self.do_gen3d = not skip_gen3d
+        self.do_gen2d = do_gen2d
+        self.name_from_prop = name_from_prop
 
     def __call__(self, input_mol):
+
+        log = {}
+        if input_mol is None:
+            log["input_mol_none"] = True
+            isomer_list = []
+        else:
+            log["input_mol_none"] = False
+            try:
+                isomer_list = self.process(input_mol)
+            except Exception as e:
+                log["exception"] = e
+                isomer_list = []
+        return (isomer_list, log)
+
+    def process(self, input_mol):
+
+        if self.name_from_prop:
+            name = input_mol.GetProp(self.name_from_prop)
+        elif input_mol.HasProp("_Name"):
+            name = input_mol.GetProp("_Name")
+        else:
+            name = ""
+
         mol = Chem.RemoveHs(input_mol) 
         pool = [input_mol]
 
@@ -517,23 +545,36 @@ class Scrub:
                 for mol_out in self.tautomerizer(mol): 
                     molset.add(mol_out)
             pool = list(molset)
-        output_mol_list = []
-        if self.do_gen3d:
-            for mol in pool:
-                mol_out = gen3d(mol, no_ringfix=self.no_ringfix)
-                output_mol_list.append(mol_out)
 
+        if self.do_gen3d:
+            output_mol_list = []
+            for mol in pool:
+                mol_out = gen3d(mol, skip_ringfix=self.skip_ringfix)
+                output_mol_list.append(mol_out)
+        elif self.do_gen2d: # useful to write SD files
+            output_mol_list = []
+            for mol in pool:
+                AllChem.Compute2DCoords(mol)
+                output_mol_list.append(mol)
+        else:
+            output_mol_list = pool
+
+        if self.name_from_prop:
+            for mol in output_mol_list:
+                mol.SetProp("_Name", name)
+                    
         return output_mol_list
+
 
 etkdg_config = rdDistGeom.ETKDGv3()
 
-def gen3d(mol, no_ringfix=False):
+def gen3d(mol, skip_ringfix=False):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
     rdDistGeom.EmbedMolecule(mol, etkdg_config)
     etkdg_coords = mol.GetConformer().GetPositions()
     mol.RemoveAllConformers()
-    if no_ringfix:
+    if skip_ringfix:
         coords_list = [etkdg_coords]
     else:
         coords_list = fix_rings(mol, etkdg_coords)
