@@ -13,6 +13,8 @@ from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
 
+Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
+                                Chem.PropertyPickleOptions.PrivateProps)
 RDLogger.DisableLog("rdApp.*")
 
 try:
