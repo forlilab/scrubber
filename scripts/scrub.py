@@ -70,12 +70,6 @@ class SDWriter:
         self.counter_mol_group += 1
 
 
-def suffix_iter(isomer_list):
-    if self.do_name_suffixes:
-        for i, mol in enumerate(isomer_list):
-            mol.SetProp("_Name", name + suffix)
-
-
 class HDF5Writer:
 
     def __init__(self, filename):
@@ -112,27 +106,20 @@ class HDF5Writer:
         self.counter_mol_group += 1
 
 
-def get_info_str(counter=None):
-    if counter is not None:
-        counter_supplied   = counter["supplied"]
-        counter_rdkit_nope = counter["rdkit_nope"]
-        counter_ok_mols    = counter["ok_mols"]
-        counter_isomers    = counter["isomers"]
-        counter_conformers = counter["conformers"]
-        counter_failed     = counter["failed"]
-
+def get_info_str(counter):
+    c = counter
     s = ""
-    s += "Input molecules supplied: %d\n" % counter_supplied
+    s += "Input molecules supplied: %d\n" % c["supplied"]
     s += "mols processed: %d, skipped by rdkit: %d, failed: %d\n" % (
-            counter_ok_mols, counter_rdkit_nope, counter_failed)
-    if counter_ok_mols == 0:
+            c["ok_mols"], c["rdkit_nope"], c["failed"])
+    if c["ok_mols"] == 0:
         return s
     s += "nr isomers (tautomers and acid/base conjugates): %d (avg. %.3f per mol)\n" % (
-            counter_isomers, counter_isomers/counter_ok_mols)
+            c["isomers"], c["isomers"]/c["ok_mols"])
     s += "nr conformers:  %d (avg. %.3f per isomer, %.3f per mol)\n" % (
-            counter_conformers,
-            counter_conformers/counter_isomers,
-            counter_conformers/counter_ok_mols)
+            c["conformers"],
+            c["conformers"]/c["isomers"],
+            c["conformers"]/c["ok_mols"])
     return s
 
 
@@ -207,12 +194,6 @@ scrub = Scrub(
     do_gen2d=do_gen2d,
     name_from_prop=args.name_from_prop,
 )
-
-counter_supplied = 0
-counter_ok_mols = 0
-counter_isomers = 0
-counter_conformers = 0
-counter_failed = 0
 
 counter = {
     "supplied": 0,
