@@ -556,6 +556,7 @@ class SMIMolSupplierWrapper(object):
         titleLine: bool = False,
         queue_err: multiprocessing.Queue = None,
         discarded_input_fname: str = None,
+        is_enamine_cxsmiles: bool = False,
         _stop_at_defaults: bool = False,
     ):
         self.filename = filename
@@ -563,12 +564,14 @@ class SMIMolSupplierWrapper(object):
         self.titleLine = titleLine
         self.queue_err = queue_err
         self.discarded_input_fname = discarded_input_fname
+        self.is_enamine_cxsmiles = is_enamine_cxsmiles
         if _stop_at_defaults:
             return
         self.fp_input = open(filename, "r")
         self.fp_errors = None
         self._buff = []
-        self._first_line = False
+        if self.titleLine:
+            self.fp_input.readline() # ditch first line
         # print("INITIALIZED", self.titleLine)
         # print("INITIALIZED", self.queue_err)
 
@@ -580,15 +583,14 @@ class SMIMolSupplierWrapper(object):
 
     def __iter__(self):
         self.fp_input.seek(0)
+        if self.titleLine:
+            self.fp_input.readline() # ditch first line
         return self
 
     def __next__(self):
         """iterator step"""
         while True:
             line = self.fp_input.readline()
-            if self.titleLine and not self._first_line:
-                self._first_line = True
-                continue
             # readline() returns "" at the end of file, "\n" for empty lines in the file
             if not line:
                 self.fp_input.close()
@@ -598,8 +600,14 @@ class SMIMolSupplierWrapper(object):
             # skip empty lines
             if not line.strip():
                 continue
+            smiles, name, _ = line.split("\t", maxsplit=2)
             try:
-                mol = Chem.MolFromSmiles(line, sanitize=self.sanitize)
+                if self.is_enamine_cxsmiles:
+                    smiles, name, _ = line.split("\t", maxsplit=2)
+                    mol = Chem.MolFromSmiles(smiles, sanitize=self.sanitize)
+                    mol.SetProp("_Name", name) 
+                else:
+                    mol = Chem.MolFromSmiles(line, sanitize=self.sanitize)
                 if mol is None:
                     if not self.queue_err is None:
                         self.queue_err.put(("input", line), block=True)

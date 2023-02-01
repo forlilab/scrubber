@@ -124,7 +124,7 @@ def get_info_str(counter):
 
 
 parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates")
-parser.add_argument("input", help="input filename (.sdf/.mol/.smi) or SMILES string")
+parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxsmiles) or SMILES string")
 parser.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
 parser.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
 parser.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
@@ -135,6 +135,7 @@ parser.add_argument("--skip_tautomers", help="skip enumeration of tautomers", ac
 parser.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 parser.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 parser.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
+parser.add_argument("--debug", help="errors are raised", action="store_true")
 args = parser.parse_args()
 
 if args.ph_low is None and args.ph_high is None:
@@ -155,6 +156,8 @@ elif extension == ".mol":
     supplier = [Chem.MolFromMolFile(args.input)]
 elif extension == ".smi":
     supplier = SMIMolSupplierWrapper(args.input)
+elif extension == ".cxsmiles":
+    supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
 else:
     mol = Chem.MolFromSmiles(args.input)
     if mol is None:
@@ -204,6 +207,25 @@ counter = {
     "failed": 0,
 }
 
+def scrub_and_catch_errors(input_mol):
+    log = {}
+    if input_mol is None:
+        log["input_mol_none"] = True
+        isomer_list = []
+    else:
+        log["input_mol_none"] = False
+        try:
+            isomer_list = scrub(input_mol)
+        except Exception as e:
+            log["exception"] = e
+            isomer_list = []
+    return (isomer_list, log)
+
+def scrub_and_debug(input_mol):
+    log = {"input_mol_none": input_mol is None}
+    isomer_list = scrub(input_mol)
+    return (isomer_list, log)
+
 def write_and_log(isomer_list, log, counter):
     counter["supplied"] += 1
     if log["input_mol_none"]:
@@ -226,10 +248,15 @@ def write_and_log(isomer_list, log, counter):
         if "exception" in log:
             print(log["exception"], file=sys.stderr)
 
+if args.debug:
+    scrub_fn = scrub_and_debug
+else:
+    scrub_fn = scrub_and_catch_errors
+
 with Writer(args.out_fname) as w:
     if args.cpu == 1:
         for input_mol in supplier:
-            isomer_list, log = scrub(input_mol)
+            isomer_list, log = scrub_fn(input_mol)
             write_and_log(isomer_list, log, counter)
     else:
         if args.cpu < 1:
@@ -237,7 +264,7 @@ with Writer(args.out_fname) as w:
         else:
             nr_proc = args.cpu
         p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
-        for (isomer_list, log) in p.imap_unordered(scrub, supplier):
+        for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
             write_and_log(isomer_list, log, counter)
 
 print("Scrub completed.\nSummary of what happened:")

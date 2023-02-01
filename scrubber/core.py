@@ -507,21 +507,6 @@ class Scrub:
 
     def __call__(self, input_mol):
 
-        log = {}
-        if input_mol is None:
-            log["input_mol_none"] = True
-            isomer_list = []
-        else:
-            log["input_mol_none"] = False
-            try:
-                isomer_list = self.process(input_mol)
-            except Exception as e:
-                log["exception"] = e
-                isomer_list = []
-        return (isomer_list, log)
-
-    def process(self, input_mol):
-
         if self.name_from_prop:
             name = input_mol.GetProp(self.name_from_prop)
         elif input_mol.HasProp("_Name"):
