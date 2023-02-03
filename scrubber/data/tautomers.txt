@@ -5,3 +5,4 @@
 KEEPMAX_SMARTS [a] aromatic
 KEEPMAX_SMARTS [OX1,SX1]=[CX3][NX3] amide
 KEEPMAX_SMARTS [CX4][CX3](=[OX1]) acetone
+KEEPMIN_SMARTS [#6X3][NX4+1] anilinium

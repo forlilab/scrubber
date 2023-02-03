@@ -40,8 +40,8 @@ class AcidBaseConjugator:
     @staticmethod
     def parse_reaction_file(datafile: str) -> list:
         """the line format is the following:
-               SMARTS >> SMARTS NAME PKA_VALUE
-           the space between SMARTS and >> is optional
+               SMARTS <<>> SMARTS NAME PKA_VALUE
+           the space between SMARTS and <<>> is optional
         """
         reactions = []
         name_set = set()
@@ -50,7 +50,7 @@ class AcidBaseConjugator:
                 line = line.strip()
                 if len(line) == 0 or line[0] == "#":
                     continue
-                rxn_left, rxn_right = line.split(">>")
+                rxn_left, rxn_right = line.split("<<>>")
                 rxn_right, name, pka = rxn_right.split()
                 if name in name_set:
                     raise ValueError("reaction name must be unique") 
@@ -100,12 +100,14 @@ class Tautomerizer:
                 smarts_count[i][j] = len(mol.GetSubstructMatches(smarts_mol))
     
         # select tautomers that have the max count of each SMARTS
-        max_of_all_counts = False # fewer tautomers if set to True
+        best_of_all_counts = False # fewer tautomers if set to True
         is_selected = [True] * len(tautomers)
-        for count in smarts_count:
-            current_max = max([count[i] for i in range(len(tautomers)) if is_selected[i] or max_of_all_counts])
+        for index in range(len(self.keepmax_smarts)):
+            fn = self.keepmax_smarts[index]["fn"]
+            count = smarts_count[index]
+            current_best = fn([count[i] for i in range(len(tautomers)) if is_selected[i] or best_of_all_counts])
             for j in range(len(tautomers)):
-                is_selected[j] = is_selected[j] and (count[j] == current_max)
+                is_selected[j] = is_selected[j] and (count[j] == current_best)
         
         output = [tautomers[j] for j in range(len(tautomers)) if is_selected[j]]
         for mol in output:
@@ -121,9 +123,10 @@ class Tautomerizer:
                 line = line.strip()
                 if len(line) == 0 or line[0] == "#":
                     continue
-                if line.startswith("KEEPMAX_SMARTS"):
+                if line.startswith("KEEPMAX_SMARTS") or line.startswith("KEEPMIN_SMARTS"):
                     _, smarts, name = line.split()
-                    keepmax_smarts.append({"smarts": smarts, "name": name})
+                    fn = max if line[4:7] == "MAX" else min
+                    keepmax_smarts.append({"smarts": smarts, "name": name, "fn": fn})
                 else:
                     smirks, name = line.split()
                     reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name})
