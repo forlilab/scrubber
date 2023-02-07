@@ -587,6 +587,9 @@ class SMIMolSupplierWrapper(object):
             self.fp_input.readline() # ditch first line
         return self
 
+    def reset(self): # same interface as rdkit.Chem.SDMolSupplier
+        self.fp_input.seek(0)
+
     def __next__(self):
         """iterator step"""
         while True:

@@ -490,7 +490,6 @@ class Scrub:
         skip_ringfix=False,
         skip_gen3d=False,
         do_gen2d=False,
-        name_from_prop=None,
     ):
         self.acid_base_conjugator = AcidBaseConjugator()
         self.tautomerizer = Tautomerizer()
@@ -503,16 +502,8 @@ class Scrub:
         self.skip_ringfix = skip_ringfix # not avoiding negative to pass directly to gen3d
         self.do_gen3d = not skip_gen3d
         self.do_gen2d = do_gen2d
-        self.name_from_prop = name_from_prop
 
     def __call__(self, input_mol):
-
-        if self.name_from_prop:
-            name = input_mol.GetProp(self.name_from_prop)
-        elif input_mol.HasProp("_Name"):
-            name = input_mol.GetProp("_Name")
-        else:
-            name = ""
 
         mol = Chem.RemoveHs(input_mol) 
         pool = [input_mol]
@@ -544,9 +535,6 @@ class Scrub:
         else:
             output_mol_list = pool
 
-        if self.name_from_prop:
-            for mol in output_mol_list:
-                mol.SetProp("_Name", name)
                     
         return output_mol_list
 

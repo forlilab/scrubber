@@ -38,8 +38,9 @@ class SDWriter:
     def __exit__(self, *args):
         self.rdkit_sdwriter.close()
 
-    def write_mols(self, mol_group, add_suffix=False):
+    def write_mols(self, mol_group, add_suffix=False, add_serial_suffix=False):
 
+        add_suffix |= add_serial_suffix
         if add_suffix and len(mol_group) > 0:
             if mol_group[0].HasProp("_Name"):
                 name = mol_group[0].GetProp("_Name") # assumes all mols have same name, which they should
@@ -56,7 +57,11 @@ class SDWriter:
                     "nr_conformers:":  mol.GetNumConformers(),
                     "nr_isomers:":  len(mol_group),
                 }))
-                if add_suffix:
+                if add_serial_suffix:
+                    if nr_isomers > 1 or nr_confs > 1:
+                        suffix = "_%d" % (i + 1) 
+                        mol.SetProp("_Name", name + suffix)
+                elif add_suffix:
                     if nr_isomers > 1 and nr_confs > 1:
                         suffix = "_i%d-c%d" % (i, j)
                     elif nr_isomers > 1 and nr_confs <= 1:
@@ -87,8 +92,13 @@ class HDF5Writer:
         self.h5file.close()
 
     def write_mols(self, mol_group, add_suffix=False):
-        for mol in mol_group:
-            if add_suffix:
+        nr_isomers = len(isomer_list)
+        for i, mol in enumerate(mol_group):
+            nr_confs = mol.GetNumConformers()
+            if add_serial_suffix:
+                if nr_isomers > 1 or nr_confs > 1:
+                    suffix = "_%d" % (i + 1) 
+            elif add_suffix:
                 if mol.HasProp("_Name"):
                     name = mol.GetProp("_Name")
                 else:
@@ -104,6 +114,65 @@ class HDF5Writer:
             self.group_id.resize((index + 1, ))
             self.group_id[index] = self.counter_mol_group
         self.counter_mol_group += 1
+
+
+class MolSupplier:
+    """wraps other suppliers (e.g. Chem.SDMolSupplier) to change non-integer
+        molecule names to integers, and to set rdkit mol names from properties
+    """
+
+    def __init__(self, supplier, name_from_prop=None, rename_to_int=False, nr_digits=10):
+        self.supplier = supplier
+        self.name_from_prop = name_from_prop
+        self.rename_to_int = rename_to_int
+        self.nr_digits = nr_digits
+        self.names = {}
+        self.counter = 0
+        
+    def __iter__(self):
+        self.supplier.reset()
+        return self
+
+    def __next__(self):
+        mol = self.supplier.__next__()
+        if mol is None:
+            return mol
+        if self.name_from_prop:
+            name = mol.GetProp(self.name_from_prop)
+            mol.SetProp("_Name", name)
+        if self.rename_to_int:
+            name = mol.GetProp("_Name")
+            newname = self._rename(name)
+            mol.SetProp("_Name", newname)
+        return mol
+        
+    def _rename(self, name):
+        """rename if name is not an integer, or a sequence of alphabet chars
+            followed by an integer."""
+
+        # special case for Enamine's molecules
+        if name.startswith("PV-") and name[3:].isdigit():
+            return "PV" + name[3:] # remove dash from Enamine's PV-000000000000
+        is_good = False
+        if name.isalnum():
+            # make sure all letters preceed the decimals, no mix
+            is_good = True
+            num_started = False
+            for c in name:
+                num_started |= c.isdecimal()
+                if num_started and not c.isdecimal():
+                    is_good = False
+                    break
+        if is_good:
+            return name
+        
+        self.counter += 1
+        #if name in self.names:
+        #    raise RuntimeError("repeated molecule name: %s" % name)
+        #self.names[name] = self.counter
+        self.names[self.counter] = name
+        tmp = "RN%0" + "%d" % self.nr_digits + "d"
+        return tmp % self.counter
 
 
 def get_info_str(counter):
@@ -136,6 +205,7 @@ parser.add_argument("--skip_ringfix", help="skip fixes of six-member rings", act
 parser.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 parser.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
 parser.add_argument("--debug", help="errors are raised", action="store_true")
+parser.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
 args = parser.parse_args()
 
 if args.ph_low is None and args.ph_high is None:
@@ -167,6 +237,13 @@ else:
         sys.exit()
     supplier = [mol]
 
+if args.wcg or args.name_from_prop:
+    supplier = MolSupplier(
+        supplier,
+        name_from_prop=args.name_from_prop,
+        rename_to_int=args.wcg
+    )
+
 # output
 do_gen2d = False # if output SDF and skip_gen3d, we will need 2D conformers
 extension = pathlib.Path(args.out_fname).suffix
@@ -195,7 +272,6 @@ scrub = Scrub(
     skip_ringfix=args.skip_ringfix,
     skip_gen3d=args.skip_gen3d,
     do_gen2d=do_gen2d,
-    name_from_prop=args.name_from_prop,
 )
 
 counter = {
@@ -232,7 +308,7 @@ def write_and_log(isomer_list, log, counter):
         counter["rdkit_nope"] += 1
     elif len(isomer_list):
         try:
-            w.write_mols(isomer_list, add_suffix=True)
+            w.write_mols(isomer_list, add_suffix=True, add_serial_suffix=args.wcg)
             counter["ok_mols"] += 1
         except Exception as e:
             print(e, file=sys.stderr)
@@ -269,3 +345,10 @@ with Writer(args.out_fname) as w:
 
 print("Scrub completed.\nSummary of what happened:")
 print(get_info_str(counter), end="")
+
+if args.wcg:
+    fname = pathlib.Path(args.out_fname).with_suffix(".renaming.json")
+    print("Writing %s" % (fname))
+    with open(fname, "w") as f:
+        json.dump(supplier.names, f)
+    print("Done.")
