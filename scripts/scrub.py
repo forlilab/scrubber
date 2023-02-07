@@ -47,6 +47,7 @@ class SDWriter:
             else:
                 name = ""
         nr_isomers = len(isomer_list)
+        serial_suffix = 0
         for i, mol in enumerate(mol_group):
             nr_confs = mol.GetNumConformers()
             for j, conf in enumerate(mol.GetConformers()):
@@ -58,9 +59,9 @@ class SDWriter:
                     "nr_isomers:":  len(mol_group),
                 }))
                 if add_serial_suffix:
+                    serial_suffix += 1
                     if nr_isomers > 1 or nr_confs > 1:
-                        suffix = "_%d" % (i + 1) 
-                        mol.SetProp("_Name", name + suffix)
+                        mol.SetProp("_Name", name + "_%d" % serial_suffix)
                 elif add_suffix:
                     if nr_isomers > 1 and nr_confs > 1:
                         suffix = "_i%d-c%d" % (i, j)
@@ -93,11 +94,13 @@ class HDF5Writer:
 
     def write_mols(self, mol_group, add_suffix=False):
         nr_isomers = len(isomer_list)
+        serial_suffix = 0
         for i, mol in enumerate(mol_group):
             nr_confs = mol.GetNumConformers()
             if add_serial_suffix:
                 if nr_isomers > 1 or nr_confs > 1:
-                    suffix = "_%d" % (i + 1) 
+                    serial_suffix += 1
+                    mol.SetProp("_Name", name + "_%d" % serial_suffix)
             elif add_suffix:
                 if mol.HasProp("_Name"):
                     name = mol.GetProp("_Name")
