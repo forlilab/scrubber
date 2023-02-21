@@ -35,6 +35,6 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=["rdkit>=2022.03.1"],
-    python_requires=">=3.8.*",
+    python_requires=">=3.8",
     license="GPL-v3",
 )
