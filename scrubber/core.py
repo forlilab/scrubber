@@ -490,6 +490,8 @@ class Scrub:
         skip_ringfix=False,
         skip_gen3d=False,
         do_gen2d=False,
+        max_ff_iter=None,
+        etkdg_rng_seed=None,
     ):
         self.acid_base_conjugator = AcidBaseConjugator()
         self.tautomerizer = Tautomerizer()
@@ -502,6 +504,8 @@ class Scrub:
         self.skip_ringfix = skip_ringfix # not avoiding negative to pass directly to gen3d
         self.do_gen3d = not skip_gen3d
         self.do_gen2d = do_gen2d
+        self.max_ff_iter = max_ff_iter
+        self.etkdg_rng_seed = etkdg_rng_seed
 
     def __call__(self, input_mol):
 
@@ -525,7 +529,12 @@ class Scrub:
         if self.do_gen3d:
             output_mol_list = []
             for mol in pool:
-                mol_out = gen3d(mol, skip_ringfix=self.skip_ringfix)
+                mol_out = gen3d(
+                    mol,
+                    skip_ringfix=self.skip_ringfix,
+                    max_ff_iter=self.max_ff_iter,
+                    etkdg_rng_seed=self.etkdg_rng_seed,
+                )
                 output_mol_list.append(mol_out)
         elif self.do_gen2d: # useful to write SD files
             output_mol_list = []
@@ -535,15 +544,15 @@ class Scrub:
         else:
             output_mol_list = pool
 
-                    
         return output_mol_list
 
 
-etkdg_config = rdDistGeom.ETKDGv3()
-
-def gen3d(mol, skip_ringfix=False):
+def gen3d(mol, skip_ringfix=False, max_ff_iter=None, etkdg_rng_seed=None):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
+    etkdg_config = rdDistGeom.ETKDGv3()
+    if etkdg_rng_seed is not None:
+        etkdg_config.randomSeed = etkdg_rng_seed
     rdDistGeom.EmbedMolecule(mol, etkdg_config)
     etkdg_coords = mol.GetConformer().GetPositions()
     mol.RemoveAllConformers()
@@ -556,7 +565,11 @@ def gen3d(mol, skip_ringfix=False):
         for i, (x, y, z) in enumerate(coords):
             c.SetAtomPosition(i, Point3D(x, y, z))
         mol.AddConformer(c, assignId=True)
-    rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
+    if max_ff_iter is None: # use RDKit default
+        rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
+    else:
+        rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+        
     return mol
 
 

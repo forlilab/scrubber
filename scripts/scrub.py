@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import argparse
+import io
 import json
 import multiprocessing
+from os import linesep
 import pathlib
 import sys
 
@@ -194,22 +196,51 @@ def get_info_str(counter):
             c["conformers"]/c["ok_mols"])
     return s
 
+parser_essential = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", add_help=False)
 
-parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates")
-parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxsmiles) or SMILES string")
-parser.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
-parser.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
-parser.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
-parser.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", type=float)
-parser.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
-parser.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
-parser.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
-parser.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
-parser.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
-parser.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
-parser.add_argument("--debug", help="errors are raised", action="store_true")
-parser.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
-args = parser.parse_args()
+parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxsmiles) or SMILES string")
+
+basic = parser_essential.add_argument_group("options")
+basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
+basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
+basic.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
+basic.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
+basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
+basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
+basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
+
+misc = parser_essential.add_argument_group("miscellaneous")
+misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
+misc.add_argument("--debug", help="errors are raised", action="store_true")
+misc.add_argument("-h", "--help", help="show this help message and exit", action="help")
+misc.add_argument("--help_advanced", help="show advanced options and exit", action="store_true")
+
+parser_advanced = argparse.ArgumentParser() # for --help_advanced
+
+acidbase = parser_advanced.add_argument_group("acid base enumeration")
+acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", type=float)
+acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
+
+geom = parser_advanced.add_argument_group("3D coordinates")
+geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=200)
+geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int, default=200)
+
+misc2 = parser_advanced.add_argument_group("more miscellaneous options")
+misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
+
+if "--help_advanced" in sys.argv:
+    parser_essential.print_help()
+    f = io.StringIO()
+    parser_advanced.print_help(f)
+    f.seek(0)
+    advanced_help = f.read()
+    advanced_help = linesep + linesep.join(advanced_help.split(linesep)[5:-1])
+    print(advanced_help)
+    sys.exit()
+
+args_essential, remaining_args = parser_essential.parse_known_args()
+args_advanced = parser_advanced.parse_args(remaining_args)
+args = argparse.Namespace(**vars(args_essential), **vars(args_advanced))
 
 if args.ph_low is None and args.ph_high is None:
     ph_low = args.ph
@@ -275,6 +306,8 @@ scrub = Scrub(
     skip_ringfix=args.skip_ringfix,
     skip_gen3d=args.skip_gen3d,
     do_gen2d=do_gen2d,
+    max_ff_iter=args.max_ff_iter,
+    etkdg_rng_seed=args.etkdg_rng_seed,
 )
 
 counter = {
