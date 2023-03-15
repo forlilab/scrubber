@@ -7,7 +7,7 @@ What happens:
  - enumerate tautomers (aiming at low energy states only)
  - enumerate pH corrections
  - convert boats to chairs (6-member rings) and enumerate both chair states
- - enumerate chiral centers
+ - enumerate chiral centers (not implemented right now)
 
 
 # Installation
@@ -28,22 +28,23 @@ conda install rdkit -c conda-forge
 ## Python scripting
 ```python
 from rdkit import Chem
-from scrubber.core import ScrubberCore
+from scrubber import Scrub
 
-scrub = ScrubberCore()
+scrub = Scrub(
+    ph_low=7.4,
+    ph_high=7.4,
+)
 
-mol = Chem.MolFromSmiles("Clc1ccccc1C(=O)Nc2nc[nH]c2")
-microstates = []
-microstate_generator = scrub.process(mol)
+mol = Chem.MolFromSmiles("Clc1c(OCCC3)c3ccc1C(=O)Nc2nc[nH]c2")
 
-# each state is an rdkit mol
-for state in microstate_generator:
-    microstates.append(state)
+# each state (e.g. tautomer) an rdkit mol and may have multiple conformers
+for mol_state in scrub(mol):
+    print(Chem.MolToSmiles(mol_state), "nr conformers: %d" % mol_state.GetNumConformers())
 ```
 
 ## Command line tool
 ```sh
-scrub.py --in_fname test.smi --out_fname test.sdf
+scrub.py test.smi -o test.sdf
 ```
 
 Where "test.smi" can look like this:

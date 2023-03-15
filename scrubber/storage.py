@@ -603,7 +603,6 @@ class SMIMolSupplierWrapper(object):
             # skip empty lines
             if not line.strip():
                 continue
-            smiles, name, _ = line.split("\t", maxsplit=2)
             try:
                 if self.is_enamine_cxsmiles:
                     smiles, name, _ = line.split("\t", maxsplit=2)
