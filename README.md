@@ -42,12 +42,19 @@ for mol_state in scrub(mol):
     print(Chem.MolToSmiles(mol_state), "nr conformers: %d" % mol_state.GetNumConformers())
 ```
 
-## Command line tool
+## Command line tool examples
 ```sh
-scrub.py test.smi -o test.sdf
+scrub.py "c1cc[nH]c(=O)c1" -o scrubbed.sdf --pH 5 --skip_gen3d
+scrub.py input_mols.sdf -o scrubbed.sdf
+scrub.py input_mols.smi -o scrubbed.sdf
 ```
 
-Where "test.smi" can look like this:
+Other options described in the help message:
+```sh
+scrub.py -h
+```
+
+Where "input\_mols.smi" can look like this:
 ```
 CC(=O)O aceticacid
 CN(C)C trimethylamine 
