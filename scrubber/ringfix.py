@@ -41,7 +41,7 @@ class RingInfo:
         self.normal = {}
         self.centroid = {}
         self.indices = [i for i in indices]
-    
+
         n = len(indices)
         for i in range(n):
             a = np.array(coords[indices[(i-2) % n]]) # rod1
@@ -83,7 +83,7 @@ class RingInfo:
                     "dot: %.3f" % dot,
                     "upness: %.3f" % upness,
                 )
-        
+
 
 def get_substituents(mol, indices):
     substituents = {}
@@ -99,14 +99,14 @@ def get_substituents(mol, indices):
                 "atomic_nr": neigh.GetAtomicNum(),
             }
             neigh_idx = neigh.GetIdx()
-            if neigh_idx in other_ring_idxs:  
+            if neigh_idx in other_ring_idxs:
                 continue
             if neigh.GetAtomicNum() == 1:
                 info["downstream_indices"].add(neigh_idx)
                 atom_info[neigh_idx] = info
                 continue
             info["nr_neighbors"] = len([a for a in neigh.GetNeighbors() if a.GetAtomicNum() > 1]) - 1
-            visited = [idx, neigh_idx] 
+            visited = [idx, neigh_idx]
             info["bites_own_tail"] |= bite_own_tail_recursively(mol, neigh_idx, visited, other_ring_idxs)
             visited.pop(0) # remove ring atom (idx)
             info["downstream_indices"] = info["downstream_indices"].union(visited)
@@ -121,7 +121,7 @@ def calc_boat_likeliness(ring_info):
     for i in range(6):
         idx = ring_info.indices[i]
         opposite_corner_idx = ring_info.indices[(i + 3) % 6]
-        dot = ring_info.dot_edges[idx] 
+        dot = ring_info.dot_edges[idx]
         u1 = ring_info.upness[idx]
         u2 = ring_info.upness[opposite_corner_idx]
         boat_likeliness += dot * u1 * u2
@@ -129,7 +129,7 @@ def calc_boat_likeliness(ring_info):
 
 def calc_axial_likeliness_old(ringinfo, substituents, coords):
     axial_likeliness = 0.
-    for idx in substituents: 
+    for idx in substituents:
         for neigh_idx in substituents[idx]:
             substituent = substituents[idx][neigh_idx]
             if substituent["atomic_nr"] == 1:
@@ -171,7 +171,7 @@ def calc_axial_likeliness(substituents, coords):
         vj = norm(coords[j] - centroid)
         normals.append(np.cross(vi, vj))
     normal = np.mean(normals, axis=0) # not normalized so length correlates with planarity of ring
-    for idx in substituents: 
+    for idx in substituents:
         for neigh_idx in substituents[idx]:
             substituent = substituents[idx][neigh_idx]
             if substituent["atomic_nr"] == 1:
@@ -235,7 +235,7 @@ def fix_rings(mol, coords, debug=False):
             tmp.extend(new_coords)
         coords_list = tmp
     return coords_list
-        
+
 
 def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     """
@@ -257,7 +257,7 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     # of c1 and c2 by rotating around np.cross(v1, v2) so that the new_h2 point
     # goes back to the original h2 position. Thus, h2 position remains unchanged.
     angle_corners = dihedral(h1, c1, c2, h2)
-    new_h2 = np.dot(rotation_matrix(c2-c1, -2*angle_corners), h2-c2) + c2 
+    new_h2 = np.dot(rotation_matrix(c2-c1, -2*angle_corners), h2-c2) + c2
     v1 = norm(new_h2-h1)
     v2 = norm(h2-h1)
     axis = np.cross(v1, v2)
@@ -273,7 +273,7 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     angle = dihedral(orig_mid_corner, h1, h2, new_mid_corner)
     coords = rotate_ring_atom(idxs[2], coords, h1-h2, angle, substituents)
     coords = rotate_ring_atom(idxs[3], coords, h1-h2, angle, substituents)
-    
+
     # rotate h1 substituents over r1-h1 axis
     angle = dihedral(r2, r1, h1, coords[idxs[2]]) - dihedral(r2, r1, h1, c1)
     coords = rotate_ring_atom(idxs[1], coords, h1-r1, angle, substituents)
@@ -295,7 +295,7 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
 
 def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_likeliness_range=0.1):
     if len(idxs) != 6:
-        raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs))) 
+        raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
         return [coords]
 
@@ -314,7 +314,7 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_li
     highest_flip_score = -1e10
     for i in range(3):
         c1 = idxs[i]
-        c2 = idxs[(i+3) % 6] 
+        c2 = idxs[(i+3) % 6]
         dot = ringinfo.dot_edges[idxs[i]] # co-linearity of rod1-hinge1 and rod2-hinge2 axis
         substituent_weight = 0.
         for idx in [c1, c2]:
@@ -341,13 +341,13 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_li
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
     if starting_axial_likeliness < 0.05 and new_axial_likeliness < 0.05: # no subs?
         return [coords]
-    elif new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range:
+    elif (not new_axial_likeliness == 0 and not starting_axial_likeliness==0) and ( new_axial_likeliness / starting_axial_likeliness > 1.0 + axial_likeliness_range ):
         return [coords]
-    elif starting_axial_likeliness / new_axial_likeliness > 1.0 + axial_likeliness_range:
+    elif (not starting_axial_likeliness == 0 and not new_axial_likeliness == 0) and (starting_axial_likeliness / new_axial_likeliness > 1.0 + axial_likeliness_range):
         return [newpos]
     else:
         return [coords, newpos]
-         
+
 
 def convert_boat_to_chair(mol, coords, idxs, debug):
 
@@ -363,8 +363,8 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         b_idx = idxs[(i - 1) % 6] # hinge1
         d_idx = idxs[(i + 1) % 6] # hinge2
         e_idx = idxs[(i + 2) % 6] # hinge1
-        opposite_upness = ringinfo.upness[opposite_corner_idx] 
-        this_upness = ringinfo.upness[idx] 
+        opposite_upness = ringinfo.upness[opposite_corner_idx]
+        this_upness = ringinfo.upness[idx]
         # About flip_score:
         # If a corner is nearly in plane, and the other is far from plane,
         # we want to flip the one that is nearly in plane, thus we take
@@ -384,7 +384,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         scores.append(flip_score)
         if debug:
             print("corner: %d, flip_score: %.2f, this_up=%.2f, opposite_up=%.2f, dot_edges=%.2f" % (idx+1, flip_score, this_upness, opposite_upness, ringinfo.dot_edges[idx]))
-    
+
     if debug:
         print("Starting boat_likeliness = %.3f" % calc_boat_likeliness(ringinfo))
         print("Starting axial_score = %.3f" % calc_axial_likeliness(substituents, coords))
@@ -401,7 +401,7 @@ def convert_boat_to_chair(mol, coords, idxs, debug):
         if debug:
             if angle * angle2 < 0:
                 print('WARNING: expected angles of opposing corners to be of same signs')
-        
+
         # if the starting angle is large (less than 150 deg) rotate to the
         # inverse of that. Otherwise rotate to 150 deg (5 * pi / 6)
         target_angle=3*math.pi/4
