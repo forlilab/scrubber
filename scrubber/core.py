@@ -493,8 +493,8 @@ class Scrub:
         max_ff_iter=None,
         etkdg_rng_seed=None,
     ):
-        self.acid_base_conjugator = AcidBaseConjugator()
-        self.tautomerizer = Tautomerizer()
+        self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
+        self.tautomerizer = Tautomerizer.from_default_data_files()
         self.ph_low = ph_low
         if ph_high is None:
             ph_high = ph_low

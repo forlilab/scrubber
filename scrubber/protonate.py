@@ -5,11 +5,11 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 
 datadir = pathlib.Path(__file__).parents[0] / "data"
+default_tautomers_fn = datadir / "tautomers.txt"
+default_pka_reactions_fn = datadir / "pka_reactions.txt"
 
 class AcidBaseConjugator:
-    def __init__(self, pka_reactions=None):
-        if pka_reactions is None: 
-            pka_reactions = self.parse_reaction_file(datadir / "pka_reactions.txt") 
+    def __init__(self, pka_reactions):
         self.pka_reactions = pka_reactions
 
     def __call__(self, input_mol, ph_range_low, ph_range_high):
@@ -32,11 +32,16 @@ class AcidBaseConjugator:
             copy_mol_props(input_mol, mol)
         return mol_list
 
+    @classmethod 
+    def from_default_data_files(cls):
+        pka_reactions = cls.parse_reaction_file(default_pka_reactions_fn)
+        return cls(pka_reactions)
+
     @classmethod
     def from_reactions_filename(cls, fname):
         pka_reactions = cls.parse_reaction_file(fname)
         return cls(pka_reactions) 
-        
+
     @staticmethod
     def parse_reaction_file(datafile: str) -> list:
         """the line format is the following:
@@ -65,14 +70,15 @@ class AcidBaseConjugator:
 
 
 class Tautomerizer:
-    def __init__(self, reactions=None, keepmax_smarts=None, nr_rounds=2):
-        if reactions is None:
-            reactions, _ = self.parse_tautomers_config_file(datadir / "tautomers.txt") 
-        if keepmax_smarts is None:
-            _, keepmax_smarts = self.parse_tautomers_config_file(datadir / "tautomers.txt") 
+    def __init__(self, reactions, keepmax_smarts, nr_rounds=2):
         self.reactions = reactions
         self.keepmax_smarts = keepmax_smarts
         self.nr_rounds = nr_rounds
+
+    @classmethod
+    def from_default_data_files(cls):
+        reactions, keepmax_smarts = cls.parse_tautomers_config_file(default_tautomers_fn)
+        return cls(reactions, keepmax_smarts)
 
     @classmethod
     def from_reactions_filename(cls, filename, nr_rounds=2):
