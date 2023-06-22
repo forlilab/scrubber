@@ -490,8 +490,9 @@ class Scrub:
         skip_ringfix=False,
         skip_gen3d=False,
         do_gen2d=False,
-        max_ff_iter=None,
+        max_ff_iter=200,
         etkdg_rng_seed=None,
+        ff="uff",
     ):
         self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
         self.tautomerizer = Tautomerizer.from_default_data_files()
@@ -506,6 +507,7 @@ class Scrub:
         self.do_gen2d = do_gen2d
         self.max_ff_iter = max_ff_iter
         self.etkdg_rng_seed = etkdg_rng_seed
+        self.ff = ff
 
     def __call__(self, input_mol):
 
@@ -534,6 +536,7 @@ class Scrub:
                     skip_ringfix=self.skip_ringfix,
                     max_ff_iter=self.max_ff_iter,
                     etkdg_rng_seed=self.etkdg_rng_seed,
+                    ff=self.ff,
                 )
                 output_mol_list.append(mol_out)
         elif self.do_gen2d: # useful to write SD files
@@ -547,7 +550,7 @@ class Scrub:
         return output_mol_list
 
 
-def gen3d(mol, skip_ringfix=False, max_ff_iter=None, etkdg_rng_seed=None):
+def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff"):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
     etkdg_config = rdDistGeom.ETKDGv3()
@@ -565,11 +568,14 @@ def gen3d(mol, skip_ringfix=False, max_ff_iter=None, etkdg_rng_seed=None):
         for i, (x, y, z) in enumerate(coords):
             c.SetAtomPosition(i, Point3D(x, y, z))
         mol.AddConformer(c, assignId=True)
-    if max_ff_iter is None: # use RDKit default
-        rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol)
-    else:
+    if ff == "uff":
         rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
-        
+    elif ff == "mmff94":
+        rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+    elif ff == "mmff94s":
+        rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
+    else:
+        raise RuntimeError("ff is %s but must be 'uff', 'mmff94', or 'mmff94s'" % ff)
     return mol
 
 

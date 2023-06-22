@@ -223,7 +223,8 @@ acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)"
 
 geom = parser_advanced.add_argument_group("3D coordinates")
 geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=200)
-geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int, default=200)
+geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
+geom.add_argument("--ff", help="uff, mmff94, or mmff94s", choices=["uff", "mmff94", "mmff94s"], default="uff")
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -308,6 +309,7 @@ scrub = Scrub(
     do_gen2d=do_gen2d,
     max_ff_iter=args.max_ff_iter,
     etkdg_rng_seed=args.etkdg_rng_seed,
+    ff=args.ff,
 )
 
 counter = {
