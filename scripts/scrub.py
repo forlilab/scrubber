@@ -48,17 +48,17 @@ class SDWriter:
                 name = mol_group[0].GetProp("_Name") # assumes all mols have same name, which they should
             else:
                 name = ""
-        nr_isomers = len(isomer_list)
+        nr_isomers = len(mol_group)
         serial_suffix = 0
         for i, mol in enumerate(mol_group):
             nr_confs = mol.GetNumConformers()
-            for j, conf in enumerate(mol.GetConformers()):
+            for j in range(mol.GetNumConformers()):
                 mol.SetProp("ScrubInfo", json.dumps({
                     "isomerGroup": self.counter_mol_group,
                     "isomerId": i,
                     "confId": j,
                     "nr_conformers:":  mol.GetNumConformers(),
-                    "nr_isomers:":  len(mol_group),
+                    "nr_isomers:":  nr_isomers,
                 }))
                 if add_serial_suffix:
                     serial_suffix += 1
