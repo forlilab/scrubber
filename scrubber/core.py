@@ -27,6 +27,7 @@ from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
 from .ringfix import fix_rings
+from .espaloma_minim import EspalomaMinimizer
 
 
 """
@@ -489,6 +490,7 @@ class Scrub:
         skip_tautomers=False,
         skip_ringfix=False,
         skip_gen3d=False,
+        template = None,
         do_gen2d=False,
         max_ff_iter=200,
         etkdg_rng_seed=None,
@@ -504,10 +506,16 @@ class Scrub:
         self.do_tautomers = not skip_tautomers
         self.skip_ringfix = skip_ringfix # not avoiding negative to pass directly to gen3d
         self.do_gen3d = not skip_gen3d
+        self.template = template
         self.do_gen2d = do_gen2d
         self.max_ff_iter = max_ff_iter
         self.etkdg_rng_seed = etkdg_rng_seed
         self.ff = ff
+
+        if ff == 'espaloma':
+            self.espaloma = EspalomaMinimizer()
+        else:
+            self.espaloma = None
 
     def __call__(self, input_mol):
 
@@ -537,6 +545,8 @@ class Scrub:
                     max_ff_iter=self.max_ff_iter,
                     etkdg_rng_seed=self.etkdg_rng_seed,
                     ff=self.ff,
+                    espaloma=self.espaloma,
+                    template=self.template
                 )
                 output_mol_list.append(mol_out)
         elif self.do_gen2d: # useful to write SD files
@@ -550,15 +560,20 @@ class Scrub:
         return output_mol_list
 
 
-def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff"):
+def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff", espaloma=None, template=None):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
-    etkdg_config = rdDistGeom.ETKDGv3()
-    if etkdg_rng_seed is not None:
-        etkdg_config.randomSeed = etkdg_rng_seed
-    rdDistGeom.EmbedMolecule(mol, etkdg_config)
+    if template is not None:
+        if not mol.HasSubstructMatch(template):
+            raise ValueError("molecule doesn't match the core")
+        mol = AllChem.ConstrainedEmbed(mol, template, useTethers=True)
+    else:
+        etkdg_config = rdDistGeom.ETKDGv3()
+        if etkdg_rng_seed is not None:
+            etkdg_config.randomSeed = etkdg_rng_seed
+        rdDistGeom.EmbedMolecule(mol, etkdg_config)
     etkdg_coords = mol.GetConformer().GetPositions()
-    mol.RemoveAllConformers()
+    mol.RemoveAllConformers() # to be added back after ringfix
     if skip_ringfix:
         coords_list = [etkdg_coords]
     else:
@@ -574,11 +589,13 @@ def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff
         rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
     elif ff == "mmff94s":
         rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
+    elif ff == 'espaloma':
+        if espaloma is None:
+            raise ValueError("minim_espaloma needs to be passed")
+        mol = espaloma.minim_espaloma(mol)
     else:
-        raise RuntimeError("ff is %s but must be 'uff', 'mmff94', or 'mmff94s'" % ff)
+        raise RuntimeError("ff is %s but must be 'uff', 'mmff94', 'mmff94s', or 'espaloma'" % ff)
     return mol
-
-
 
 if __name__ == "__main__":
     # import sys
