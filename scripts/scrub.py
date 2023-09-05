@@ -226,6 +226,7 @@ geom.add_argument("--max_ff_iter", help="maximum number of force field optimizat
 geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="uff")
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
+geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -285,6 +286,20 @@ if args.template is not None:
 else:
     template_mol = None
 
+if args.template_smarts is not None:
+    if args.template is None:
+        print('If passing a template SMARTs you must provide a template molecule first.')
+        sys.exit()
+    if not isinstance(args.template_smarts, str):
+        print("Template SMARTs must be a string")
+    else:
+        template_smarts = Chem.MolFromSmarts(args.template_smarts)
+    if template_smarts is None:
+        print('The provided SMARTs could not be converted into a molecule. Check your inputs.')
+        sys.exit()
+else:
+    template_smarts = None
+
 if args.wcg or args.name_from_prop:
     supplier = MolSupplier(
         supplier,
@@ -320,6 +335,7 @@ scrub = Scrub(
     skip_ringfix=args.skip_ringfix,
     skip_gen3d=args.skip_gen3d,
     template=template_mol,
+    template_smarts=template_smarts,
     do_gen2d=do_gen2d,
     max_ff_iter=args.max_ff_iter,
     etkdg_rng_seed=args.etkdg_rng_seed,
