@@ -94,7 +94,7 @@ class HDF5Writer:
     def __exit__(self, *args):
         self.h5file.close()
 
-    def write_mols(self, mol_group, add_suffix=False):
+    def write_mols(self, mol_group, add_suffix=False, add_serial_suffix=False):
         nr_isomers = len(isomer_list)
         serial_suffix = 0
         for i, mol in enumerate(mol_group):
