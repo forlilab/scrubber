@@ -361,13 +361,10 @@ def scrub_and_catch_errors(input_mol, sdwriter_failed_mols=None):
         log["input_mol_none"] = False
         try:
             isomer_list = scrub(input_mol)
-            print("here --- 1")
         except Exception as e:
             log["exception"] = e
             isomer_list = []
-            print("HEEERE 0", sdwriter_failed_mols)
             if sdwriter_failed_mols is not None:
-                print("HEEEEERE")
                 sdwriter_failed_mols.write(input_mol)
                 sdwriter_failed_mols.flush() # slow?
     return (isomer_list, log)
