@@ -202,6 +202,7 @@ parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxs
 
 basic = parser_essential.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
+basic.add_argument("--write_failed_mols", help="filename for failed molecules (.sdf)")
 basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
 basic.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
 basic.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
@@ -351,7 +352,7 @@ counter = {
     "failed": 0,
 }
 
-def scrub_and_catch_errors(input_mol):
+def scrub_and_catch_errors(input_mol, sdwriter_failed_mols=None):
     log = {}
     if input_mol is None:
         log["input_mol_none"] = True
@@ -360,12 +361,18 @@ def scrub_and_catch_errors(input_mol):
         log["input_mol_none"] = False
         try:
             isomer_list = scrub(input_mol)
+            print("here --- 1")
         except Exception as e:
             log["exception"] = e
             isomer_list = []
+            print("HEEERE 0", sdwriter_failed_mols)
+            if sdwriter_failed_mols is not None:
+                print("HEEEEERE")
+                sdwriter_failed_mols.write(input_mol)
+                sdwriter_failed_mols.flush() # slow?
     return (isomer_list, log)
 
-def scrub_and_debug(input_mol):
+def scrub_and_debug(input_mol, _):
     log = {"input_mol_none": input_mol is None}
     isomer_list = scrub(input_mol)
     return (isomer_list, log)
@@ -392,15 +399,25 @@ def write_and_log(isomer_list, log, counter):
         if "exception" in log:
             print(log["exception"], file=sys.stderr)
 
-if args.debug:
+if args.debug and args.write_failed_mols:
+    print("--write_failed_mols ignored with --debug")
+elif args.debug:
     scrub_fn = scrub_and_debug
+    sdwriter_failures = None
+elif args.write_failed_mols is not None:
+    if args.cpu != 1:
+        print("--write_failed_mols not currently working with multiprocessing, needs --cpu 1")
+    scrub_fn = scrub_and_catch_errors
+    sdwriter_failures = Chem.SDWriter(args.write_failed_mols)
 else:
     scrub_fn = scrub_and_catch_errors
+    sdwriter_failures = None
+
 
 with Writer(args.out_fname) as w:
     if args.cpu == 1:
         for input_mol in supplier:
-            isomer_list, log = scrub_fn(input_mol)
+            isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
             write_and_log(isomer_list, log, counter)
     else:
         if args.cpu < 1:
@@ -410,6 +427,10 @@ with Writer(args.out_fname) as w:
         p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
         for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
             write_and_log(isomer_list, log, counter)
+
+
+if sdwriter_failures is not None:
+    sdwriter_failures.close()
 
 print("Scrub completed.\nSummary of what happened:")
 print(get_info_str(counter), end="")
