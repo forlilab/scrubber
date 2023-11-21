@@ -494,6 +494,7 @@ class Scrub:
         template_smarts = None,
         do_gen2d=False,
         max_ff_iter=200,
+        numconfs=1,
         etkdg_rng_seed=None,
         ff="uff",
     ):
@@ -511,6 +512,7 @@ class Scrub:
         self.template_smarts = template_smarts
         self.do_gen2d = do_gen2d
         self.max_ff_iter = max_ff_iter
+        self.numconfs = numconfs
         self.etkdg_rng_seed = etkdg_rng_seed
         self.ff = ff
 
@@ -546,6 +548,7 @@ class Scrub:
                     skip_ringfix=self.skip_ringfix,
                     max_ff_iter=self.max_ff_iter,
                     etkdg_rng_seed=self.etkdg_rng_seed,
+                    numconfs=self.numconfs,
                     ff=self.ff,
                     espaloma=self.espaloma,
                     template=self.template,
@@ -635,8 +638,58 @@ def ConstrainedEmbeding(query_mol, core_mol, confId=-1, randomseed=2342, templat
   
   return query_mol
 
-def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff", espaloma=None, template=None, template_smarts=None):
-    numconfs = 10
+# def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff", espaloma=None, template=None, template_smarts=None):
+#     mol.RemoveAllConformers()
+#     mol = Chem.AddHs(mol)
+#     if template is not None:
+#         mol = ConstrainedEmbeding(query_mol=mol, 
+#                                 core_mol=template, 
+#                                 template_smarts=template_smarts, 
+#                                 confId=-1, 
+#                                 randomseed=2342, # passing a etkdg_rng_seed=None throws an error
+#                                 ff='uff')
+#     else:
+#         etkdg_config = rdDistGeom.ETKDGv3()
+#         if etkdg_rng_seed is not None:
+#             etkdg_config.randomSeed = etkdg_rng_seed
+#         rdDistGeom.EmbedMolecule(mol, etkdg_config)
+#     etkdg_coords = mol.GetConformer().GetPositions()
+#     mol.RemoveAllConformers() # to be added back after ringfix
+    
+#     if skip_ringfix:
+#         coords_list = [etkdg_coords]
+#     else:
+#         coords_list = fix_rings(mol, etkdg_coords)
+#     for coords in coords_list:
+#         c = Chem.Conformer(mol.GetNumAtoms())
+#         for i, (x, y, z) in enumerate(coords):
+#             c.SetAtomPosition(i, Point3D(x, y, z))
+#         mol.AddConformer(c, assignId=True)
+
+#     if template is None:
+#         if ff == "uff":
+#             rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+#         elif ff == "mmff94":
+#             rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+#         elif ff == "mmff94s":
+#             rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
+#         elif ff == 'espaloma':
+#             if espaloma is None:
+#                 raise ValueError("minim_espaloma needs to be passed")
+#             mol = espaloma.minim_espaloma(mol)
+#         else:
+#             raise RuntimeError("ff is %s but must be 'uff', 'mmff94', 'mmff94s', or 'espaloma'" % ff)
+    
+#     return mol
+
+def _ConfToMol(mol, conf_id):
+    conf = mol.GetConformer(conf_id)
+    new_mol = Chem.Mol(mol)
+    new_mol.RemoveAllConformers()
+    new_mol.AddConformer(Chem.Conformer(conf), assignId=True)
+    return new_mol
+
+def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None, numconfs:int=1, ff:str="uff", espaloma=None, template=None, template_smarts=None):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
     if template is not None:
@@ -647,21 +700,25 @@ def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff
                                 randomseed=2342, # passing a etkdg_rng_seed=None throws an error
                                 ff='uff')
     else:
-        etkdg_config = rdDistGeom.ETKDGv3()
-        etkdg_config.useSmallRingTorsions = True
-        etkdg_config.useMacrocycleTorsions = True
-        if etkdg_rng_seed is not None:
-            etkdg_config.randomSeed = etkdg_rng_seed
+        ps = rdDistGeom.ETKDGv3()
+        ps.randomSeed = 42
+        ps.trackFailures = True
+        ps.enforceChirality = True
+        ps.useSmallRingTorsions = True
+        ps.useMacrocycleTorsions = True
+        ps.clearConfs = True
 
-        cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs)
-        # rdDistGeom.EmbedMolecule(mol, etkdg_config)
-    etkdg_coords = mol.GetConformer().GetPositions()
+        cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
+        etkdg_coords = [c.GetPositions() for c in mol.GetConformers()]
+        
     mol.RemoveAllConformers() # to be added back after ringfix
     
     if skip_ringfix:
-        coords_list = [etkdg_coords]
+        coords_list = etkdg_coords
     else:
-        coords_list = fix_rings(mol, etkdg_coords)
+        coords_list = []
+        [coords_list.extend(fix_rings(mol, c)) for c in etkdg_coords]
+        
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):
@@ -670,22 +727,29 @@ def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff
 
     if template is None:
         if ff == "uff":
-            rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+            _energies = rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+            energies = [e[1] for e in _energies]
         elif ff == "mmff94":
-            rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+            _energies = rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
+            energies = [e[1] for e in _energies]
         elif ff == "mmff94s":
-            rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
+            _energies = rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
+            energies = [e[1] for e in _energies]
         elif ff == 'espaloma':
             if espaloma is None:
                 raise ValueError("minim_espaloma needs to be passed")
-            mol = espaloma.minim_espaloma(mol)
+            mol, energies = espaloma.minim_espaloma(mol)
         else:
             raise RuntimeError("ff is %s but must be 'uff', 'mmff94', 'mmff94s', or 'espaloma'" % ff)
+        
+    lista = [list(a) for a in zip(cids, energies)]
+    sorted_list = sorted(lista, key=lambda x: x[1])
+    best_energy_index = sorted_list[0][0]
+    final_mol = _ConfToMol(mol,best_energy_index)
     
-    return mol
+    return final_mol
 
 if __name__ == "__main__":
-    # import sys
     import json
     config = ScrubberCore.get_defaults()
     print("CONFIG!")

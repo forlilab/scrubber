@@ -63,7 +63,7 @@ class EspalomaMinimizer:
         simulation = self.Simulator(omm_top, system, integrator)
         mol_copy = self.CreateMolecule(molecule)
         mol_copy._conformers = None
-
+        energies = []
         for conformer in molecule.conformers:
 
             conformer = self.offquantity_to_openmm(conformer)
@@ -71,14 +71,14 @@ class EspalomaMinimizer:
 
             simulation.minimizeEnergy()
 
-            min_state = simulation.context.getState(getEnergy=False, getPositions=True)
+            min_state = simulation.context.getState(getEnergy=True, getPositions=True)
             min_coords = min_state.getPositions()
             min_coords = np.array([ [atom.x, atom.y, atom.z] for atom in min_coords]) * self.Unit.nanometer
 
             mol_copy.add_conformer(min_coords)
-        
+            energies.append(min_state.getPotentialEnergy()/self.Unit.kilojoules_per_mole)
         rdmol = mol_copy.to_rdkit()
 
-        return rdmol
+        return rdmol, energies
 
 
