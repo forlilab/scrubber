@@ -636,6 +636,7 @@ def ConstrainedEmbeding(query_mol, core_mol, confId=-1, randomseed=2342, templat
   return query_mol
 
 def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff", espaloma=None, template=None, template_smarts=None):
+    numconfs = 10
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
     if template is not None:
@@ -647,11 +648,16 @@ def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff
                                 ff='uff')
     else:
         etkdg_config = rdDistGeom.ETKDGv3()
+        etkdg_config.useSmallRingTorsions = True
+        etkdg_config.useMacrocycleTorsions = True
         if etkdg_rng_seed is not None:
             etkdg_config.randomSeed = etkdg_rng_seed
-        rdDistGeom.EmbedMolecule(mol, etkdg_config)
+
+        cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs)
+        # rdDistGeom.EmbedMolecule(mol, etkdg_config)
     etkdg_coords = mol.GetConformer().GetPositions()
     mol.RemoveAllConformers() # to be added back after ringfix
+    
     if skip_ringfix:
         coords_list = [etkdg_coords]
     else:
