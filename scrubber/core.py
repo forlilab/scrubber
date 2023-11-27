@@ -638,56 +638,40 @@ def ConstrainedEmbeding(query_mol, core_mol, confId=-1, randomseed=2342, templat
   
   return query_mol
 
-# def gen3d(mol, skip_ringfix=False, max_ff_iter=200, etkdg_rng_seed=None, ff="uff", espaloma=None, template=None, template_smarts=None):
-#     mol.RemoveAllConformers()
-#     mol = Chem.AddHs(mol)
-#     if template is not None:
-#         mol = ConstrainedEmbeding(query_mol=mol, 
-#                                 core_mol=template, 
-#                                 template_smarts=template_smarts, 
-#                                 confId=-1, 
-#                                 randomseed=2342, # passing a etkdg_rng_seed=None throws an error
-#                                 ff='uff')
-#     else:
-#         etkdg_config = rdDistGeom.ETKDGv3()
-#         if etkdg_rng_seed is not None:
-#             etkdg_config.randomSeed = etkdg_rng_seed
-#         rdDistGeom.EmbedMolecule(mol, etkdg_config)
-#     etkdg_coords = mol.GetConformer().GetPositions()
-#     mol.RemoveAllConformers() # to be added back after ringfix
-    
-#     if skip_ringfix:
-#         coords_list = [etkdg_coords]
-#     else:
-#         coords_list = fix_rings(mol, etkdg_coords)
-#     for coords in coords_list:
-#         c = Chem.Conformer(mol.GetNumAtoms())
-#         for i, (x, y, z) in enumerate(coords):
-#             c.SetAtomPosition(i, Point3D(x, y, z))
-#         mol.AddConformer(c, assignId=True)
-
-#     if template is None:
-#         if ff == "uff":
-#             rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
-#         elif ff == "mmff94":
-#             rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter)
-#         elif ff == "mmff94s":
-#             rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, maxIters=max_ff_iter, mmffVariant="mmff94s")
-#         elif ff == 'espaloma':
-#             if espaloma is None:
-#                 raise ValueError("minim_espaloma needs to be passed")
-#             mol = espaloma.minim_espaloma(mol)
-#         else:
-#             raise RuntimeError("ff is %s but must be 'uff', 'mmff94', 'mmff94s', or 'espaloma'" % ff)
-    
-#     return mol
-
 def _ConfToMol(mol, conf_id):
     conf = mol.GetConformer(conf_id)
     new_mol = Chem.Mol(mol)
     new_mol.RemoveAllConformers()
     new_mol.AddConformer(Chem.Conformer(conf), assignId=True)
     return new_mol
+
+def translate_failures(failure_counts):
+    """A function to catch embeding failures and translate the codes to meaninful error messages.
+    An error will all failures is raised, catched by scrub_and_catch_errors function, and printed to the SDF property of the failed SDF file.
+
+    Here is what the individual failures mean:
+
+    INITIAL_COORDS: generation of the initial coordinates from the random distance matrix (default) or from a set of random coordinates (when using random coordinate embedding) failed.
+    FIRST_MINIMIZATION: the initial optimization of the atom positions using the distance-geometry force field failed to produce a low-enough energy conformer. The check here has thresholds for both average energy per atom and the individual atom energies. I’m not providing the threshold values here since the energies from the distance-geometry force field are not physically meaningful - the threshold values are not interpretable.
+    CHECK_TETRAHEDRAL_CENTERS: at least one tetrahedral C and N centers either has a volume around it which is too small or is outside the volume defined by its neighbors
+    MINIMIZE_FOURTH_DIMENSION: the minmization to force the values of the fourth-dimensional component of each atom position failed
+    ETK_MINIMIZATION: after the minimization with the ET and/or K terms, at least one atom which should have been planar was not
+    FINAL_CHIRAL_BOUNDS: the neighborhood of an atom with specified chirality was too distorted (it violated distance constraints)
+    FINAL_CENTER_IN_VOLUME: an atom with specified chirality was outside of the volume defined by its neighbors
+    LINEAR_DOUBLE_BOND: one of the end atoms of a double bond had a linear geometry
+    BAD_DOUBLE_BOND_STEREO: the stereochemistry of a double bond with specified stereochemistry was wrong in the generated conformer
+
+    """
+
+    if sum(failure_counts) != 0:
+        failure_msgs = {}
+        for i,k in enumerate(rdDistGeom.EmbedFailureCauses.names):
+            if failure_counts[i] != 0:
+                failure_msgs[k] = failure_counts[i]
+
+        raise RuntimeError(failure_msgs)
+    else:
+        return None
 
 def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None, numconfs:int=1, ff:str="uff", espaloma=None, template=None, template_smarts=None):
     mol.RemoveAllConformers()
@@ -697,7 +681,7 @@ def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None
                                 core_mol=template, 
                                 template_smarts=template_smarts, 
                                 confId=-1, 
-                                randomseed=2342, # passing a etkdg_rng_seed=None throws an error
+                                randomseed=42, # passing a etkdg_rng_seed=None throws an error
                                 ff='uff')
     else:
         ps = rdDistGeom.ETKDGv3()
@@ -710,7 +694,9 @@ def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None
 
         cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
         etkdg_coords = [c.GetPositions() for c in mol.GetConformers()]
-        
+
+    translate_failures(ps.GetFailureCounts())
+
     mol.RemoveAllConformers() # to be added back after ringfix
     
     if skip_ringfix:
@@ -746,7 +732,7 @@ def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None
     sorted_list = sorted(lista, key=lambda x: x[1])
     best_energy_index = sorted_list[0][0]
     final_mol = _ConfToMol(mol,best_energy_index)
-    
+   
     return final_mol
 
 if __name__ == "__main__":

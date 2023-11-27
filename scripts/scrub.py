@@ -367,6 +367,7 @@ def scrub_and_catch_errors(input_mol, sdwriter_failed_mols=None):
             log["exception"] = e
             isomer_list = []
             if sdwriter_failed_mols is not None:
+                input_mol.SetProp("exception", str(e))
                 sdwriter_failed_mols.write(input_mol)
                 sdwriter_failed_mols.flush() # slow?
     return (isomer_list, log)
@@ -400,6 +401,8 @@ def write_and_log(isomer_list, log, counter):
 
 if args.debug and args.write_failed_mols:
     print("--write_failed_mols ignored with --debug")
+    scrub_fn = scrub_and_debug
+    sdwriter_failures = None
 elif args.debug:
     scrub_fn = scrub_and_debug
     sdwriter_failures = None
