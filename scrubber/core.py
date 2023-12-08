@@ -695,7 +695,8 @@ def gen3d(mol, skip_ringfix:bool=False, max_ff_iter:int=200, etkdg_rng_seed=None
         cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
         etkdg_coords = [c.GetPositions() for c in mol.GetConformers()]
 
-    translate_failures(ps.GetFailureCounts())
+    if len(cids) == 0:
+        translate_failures(ps.GetFailureCounts())
 
     mol.RemoveAllConformers() # to be added back after ringfix
     
