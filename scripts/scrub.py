@@ -372,7 +372,7 @@ def scrub_and_catch_errors(input_mol, sdwriter_failed_mols=None):
                 sdwriter_failed_mols.flush() # slow?
     return (isomer_list, log)
 
-def scrub_and_debug(input_mol, _):
+def scrub_and_debug(input_mol, _=None):
     log = {"input_mol_none": input_mol is None}
     isomer_list = scrub(input_mol)
     return (isomer_list, log)
@@ -400,7 +400,8 @@ def write_and_log(isomer_list, log, counter):
             print(log["exception"], file=sys.stderr)
 
 if args.debug and args.write_failed_mols:
-    print("--write_failed_mols ignored with --debug")
+    print("--write_failed_mols does not work with --debug, exiting", file=sys.stderr)
+    sys.exit(2)
     scrub_fn = scrub_and_debug
     sdwriter_failures = None
 elif args.debug:
@@ -408,7 +409,8 @@ elif args.debug:
     sdwriter_failures = None
 elif args.write_failed_mols is not None:
     if args.cpu != 1:
-        print("--write_failed_mols not currently working with multiprocessing, needs --cpu 1")
+        print("--write_failed_mols does not work with multiprocessing, needs --cpu 1, exiting", file=sys.stderr)
+        sys.exit(2)
     scrub_fn = scrub_and_catch_errors
     sdwriter_failures = Chem.SDWriter(args.write_failed_mols)
 else:
