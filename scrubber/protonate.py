@@ -4,6 +4,11 @@ from .common import DATA_PATH
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
+from rdkit.Chem.EnumerateStereoisomers import (
+    EnumerateStereoisomers,
+    StereoEnumerationOptions,
+    GetStereoisomerCount,
+)
 
 datapath = pathlib.Path(DATA_PATH) # convert from str to Path
 default_tautomers_fn = datapath / "tautomers.txt"
@@ -151,7 +156,7 @@ def react_and_sanitize(mol, rxn):
         product = product[0] # nr products == NumProductTemplates == 1
         try:
             s = Chem.SanitizeMol(product)
-            #product.UpdatePropertyCache()
+            product.UpdatePropertyCache()
             # loading a fresh molecule detects errors that updating the property cache doesn't
             product = Chem.MolFromSmiles(Chem.MolToSmiles(product))
             if product is None:
@@ -166,6 +171,31 @@ def react_and_sanitize(mol, rxn):
         output_products.append(product)
     return output_products
 
+
+def enumerate_stereoisomers(input_mol, unassigned_only=True, max_results=32) -> list:
+        """
+        source https://www.rdkit.org/docs/source/rdkit.Chem.EnumerateStereoisomers.html
+        """
+        opts = StereoEnumerationOptions(
+            unique=True,
+            tryEmbedding=False,
+            onlyUnassigned=unassigned_only,
+            maxIsomers=max_results,
+        )
+        isomers = UniqueMoleculeContainer([input_mol])
+        output = UniqueMoleculeContainer()
+        # process results and register the information of this transformation
+        for m in isomers:
+            print("[VERBOSE] processing molecule", Chem.MolToSmiles(m))
+            for ent in EnumerateStereoisomers(m, options=opts):
+                print(f"Made enantiomer {Chem.MolToSmiles(ent)}")
+                output.add(ent)
+
+        output = list(output)
+        for mol in output:
+            copy_mol_props(input_mol, mol)
+
+        return output
 
 def convert_recursive(mol, rxn, container):
     for product in react_and_sanitize(mol, rxn):

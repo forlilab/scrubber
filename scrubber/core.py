@@ -25,6 +25,7 @@ from .geom.geometry import GeometryGenerator
 from .transform.isomer import MoleculeIsomers
 from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
+from .protonate import enumerate_stereoisomers
 from .common import UniqueMoleculeContainer
 from .ringfix import fix_rings
 from .espaloma_minim import EspalomaMinimizer
@@ -488,6 +489,7 @@ class Scrub:
         tauto_fname=None,
         skip_acidbase=False,
         skip_tautomers=False,
+        skip_stereoisomers=False,
         skip_ringfix=False,
         skip_gen3d=False,
         template = None,
@@ -506,6 +508,7 @@ class Scrub:
         self.ph_high = ph_high
         self.do_acidbase = not skip_acidbase
         self.do_tautomers = not skip_tautomers
+        self.do_stereoisomers = not skip_stereoisomers
         self.skip_ringfix = skip_ringfix # not avoiding negative to pass directly to gen3d
         self.do_gen3d = not skip_gen3d
         self.template = template
@@ -537,6 +540,18 @@ class Scrub:
             molset = UniqueMoleculeContainer()
             for mol in pool:
                 for mol_out in self.tautomerizer(mol): 
+                    molset.add(mol_out)
+            pool = list(molset)
+
+        if self.do_stereoisomers:
+            # make a copy of the mols in pool to max sure we are properly detecting unenumerated chiral centers
+            p = Chem.SmilesParserParams()
+            p.removeHs=False
+            pool = [Chem.MolFromSmiles(Chem.MolToSmiles(mol)) for mol in pool]
+            # done with RDKit nonsense, do the actual enumeration
+            molset = UniqueMoleculeContainer()
+            for mol in pool:
+                for mol_out in enumerate_stereoisomers(mol):
                     molset.add(mol_out)
             pool = list(molset)
 

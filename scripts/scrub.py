@@ -207,6 +207,7 @@ basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF pr
 basic.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
 basic.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
 basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
+basic.add_argument("--skip_stereoisomers", help="skip enumeration of unenumerated stereoisomers, including those created by acid/base or tautomerization", action="store_true")
 basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 
@@ -334,6 +335,7 @@ scrub = Scrub(
     tauto_fname=None,
     skip_acidbase=args.skip_acidbase,
     skip_tautomers=args.skip_tautomers,
+    skip_stereoisomers=args.skip_stereoisomers,
     skip_ringfix=args.skip_ringfix,
     skip_gen3d=args.skip_gen3d,
     template=template_mol,
