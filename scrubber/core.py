@@ -553,6 +553,8 @@ class Scrub:
                 mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
                 for prop, v in props.items():
                     mol.SetProp(prop, v)
+                tmp_pool.append(mol)
+            pool = tmp_pool
             # done with RDKit nonsense, do the actual enumeration
             molset = UniqueMoleculeContainer()
             for mol in pool:
