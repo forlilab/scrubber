@@ -547,7 +547,12 @@ class Scrub:
             # make a copy of the mols in pool to max sure we are properly detecting unenumerated chiral centers
             p = Chem.SmilesParserParams()
             p.removeHs=False
-            pool = [Chem.MolFromSmiles(Chem.MolToSmiles(mol)) for mol in pool]
+            tmp_pool = []
+            for mol in pool:
+                props = mol.GetPropsAsDict(includePrivate=True)
+                mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+                for prop, v in props.items():
+                    mol.SetProp(prop, v)
             # done with RDKit nonsense, do the actual enumeration
             molset = UniqueMoleculeContainer()
             for mol in pool:
