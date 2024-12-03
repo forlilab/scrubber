@@ -165,10 +165,11 @@ def calc_axial_likeliness(substituents, coords):
     axial_likeliness = 0.
     centroid = np.mean([coords[j] for j in substituents], axis=0)
     normals = []
+    ring_idxs = list(substituents.keys())
     for i in range(len(substituents)):
         j = (i + 1) % len(substituents)
-        vi = norm(coords[i] - centroid)
-        vj = norm(coords[j] - centroid)
+        vi = norm(coords[ring_idxs[i]] - centroid)
+        vj = norm(coords[ring_idxs[j]] - centroid)
         normals.append(np.cross(vi, vj))
     normal = np.mean(normals, axis=0) # not normalized so length correlates with planarity of ring
     for idx in substituents:
@@ -286,9 +287,10 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     # return coords with least axial likeliness
     input_axial = calc_axial_likeliness(substituents, input_coords)
     mod_axial = calc_axial_likeliness(substituents, coords)
-    if input_axial / mod_axial > 1. + axial_range:
+    delta_axial = mod_axial - input_axial
+    if delta_axial < -axial_range:
         return [coords]
-    elif mod_axial / input_axial > 1. + axial_range:
+    elif delta_axial > axial_range:
         return [input_coords]
     else:
         return [input_coords, coords]
