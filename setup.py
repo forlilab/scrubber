@@ -19,10 +19,11 @@ def find_files(directory):
 
 
 setup(
-    name="scrubber",
+    name="molscrub",
     author="Forli Lab",
+    version="0.1.0",
     author_email="forli@scripps.edu",
-    url="https://github.com/forlilab/Scrubber",
+    url="https://github.com/forlilab/molscrub",
     description="Enumerate states of small organic molecules: 3D coordinates, tautomers, pH-based adjustments",
     long_description=open(os.path.join(base_dir, "README.md")).read(),
     long_description_content_type="text/markdown",
