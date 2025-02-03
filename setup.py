@@ -18,7 +18,7 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'molscrub=scrubber.main:main',
+            'scrub.py=scrubber.main:main',
         ]
     },
     package_data={
