@@ -219,27 +219,6 @@ def scrub_and_debug(input_mol, _=None):
     isomer_list = scrub(input_mol)
     return (isomer_list, log)
 
-def write_and_log(isomer_list, log, counter):
-    counter["supplied"] += 1
-    if log["input_mol_none"]:
-        counter["rdkit_nope"] += 1
-    elif len(isomer_list):
-        try:
-            w.write_mols(isomer_list, add_suffix=True, add_serial_suffix=args.wcg)
-            counter["ok_mols"] += 1
-        except Exception as e:
-            print(e, file=sys.stderr)
-            counter["failed"] += 1
-            return
-        counter["isomers"] += len(isomer_list)
-        counter["conformers"] += sum([mol.GetNumConformers() for mol in isomer_list])
-        if counter["supplied"] % 100 == 0:
-            print("Scrub in progress. Here's how things are going:")
-            print(get_info_str(counter))
-    else:
-        counter["failed"] += 1
-        if "exception" in log:
-            print(log["exception"], file=sys.stderr)
 
 def main():
     parser_essential = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", add_help=False)
@@ -373,6 +352,7 @@ def main():
         print("output file extension must be .sdf/.hdf5")
         sys.exit()
 
+    global scrub
     scrub = Scrub(
         ph_low,
         ph_high,
@@ -419,10 +399,32 @@ def main():
         sdwriter_failures = None
 
         with Writer(args.out_fname) as w:
+            def write_and_log():
+                counter["supplied"] += 1
+                if log["input_mol_none"]:
+                    counter["rdkit_nope"] += 1
+                elif len(isomer_list):
+                    try:
+                        w.write_mols(isomer_list, add_suffix=True, add_serial_suffix=args.wcg)
+                        counter["ok_mols"] += 1
+                    except Exception as e:
+                        print(e, file=sys.stderr)
+                        counter["failed"] += 1
+                        return
+                    counter["isomers"] += len(isomer_list)
+                    counter["conformers"] += sum([mol.GetNumConformers() for mol in isomer_list])
+                    if counter["supplied"] % 100 == 0:
+                        print("Scrub in progress. Here's how things are going:")
+                        print(get_info_str(counter))
+                else:
+                    counter["failed"] += 1
+                    if "exception" in log:
+                        print(log["exception"], file=sys.stderr)
+            
             if args.cpu == 1:
                 for input_mol in supplier:
                     isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
-                    write_and_log(isomer_list, log, counter)
+                    write_and_log()
             else:
                 if args.cpu < 1:
                     nr_proc = multiprocessing.cpu_count()
@@ -430,7 +432,7 @@ def main():
                     nr_proc = args.cpu
                 p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
                 for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
-                    write_and_log(isomer_list, log, counter)
+                    write_and_log()
 
 
         if sdwriter_failures is not None:
@@ -447,4 +449,5 @@ def main():
             print("Done.")
 
 if __name__ == "__main__":
+    scrub = None
     main()
