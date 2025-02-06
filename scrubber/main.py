@@ -377,7 +377,7 @@ def scrub_and_debug(input_mol, _=None):
     isomer_list = scrub(input_mol)
     return (isomer_list, log)
 
-def write_and_log(isomer_list, log, counter):
+def write_and_log(isomer_list, log, counter, w):
     counter["supplied"] += 1
     if log["input_mol_none"]:
         counter["rdkit_nope"] += 1
@@ -417,12 +417,12 @@ else:
     scrub_fn = scrub_and_catch_errors
     sdwriter_failures = None
 
-if __name__ == '__main__':
+def main():
     with Writer(args.out_fname) as w:
         if args.cpu == 1:
             for input_mol in supplier:
                 isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
-                write_and_log(isomer_list, log, counter)
+                write_and_log(isomer_list, log, counter, w)
         else:
             if args.cpu < 1:
                 nr_proc = multiprocessing.cpu_count()
@@ -430,7 +430,7 @@ if __name__ == '__main__':
                 nr_proc = args.cpu
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
             for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
-                write_and_log(isomer_list, log, counter)
+                write_and_log(isomer_list, log, counter, w)
 
 
     if sdwriter_failures is not None:
@@ -445,3 +445,6 @@ if __name__ == '__main__':
         with open(fname, "w") as f:
             json.dump(supplier.names, f)
         print("Done.")
+
+if __name__ == '__main__':
+    main()
