@@ -2,6 +2,9 @@ import numpy as np
 import math
 from rdkit import Chem
 
+
+from .geom.geometry import optimize_conformers, add_conformers_to_mol
+
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
 
@@ -225,7 +228,7 @@ def fix_rings(mol, coords, debug=False):
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, debug)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -295,7 +298,7 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     else:
         return [input_coords, coords]
 
-def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_likeliness_range=0.1):
+def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol,debug, axial_likeliness_range=0.1):
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -341,6 +344,30 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_li
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
+
+    ## calculate correct conformation by energy comparison ######
+    ## MMFF94 forcefield
+    if debug:
+        print("Optimizing ring geometries")
+
+    mol_with_confs = add_conformers_to_mol(mol, [coords, newpos])
+    optimized_energies = optimize_conformers(mol_with_confs)
+    # Print the optimized energy values
+    old_energy = optimized_energies[0][1]
+    new_energy = optimized_energies[1][1]
+    if debug:
+        for conf_id, energy in optimized_energies:
+            print(f"Conformer {conf_id}: Energy = {energy:.4f} kcal/mol")
+
+    if new_energy - old_energy < -0.1:
+        return [newpos]
+    elif new_energy - old_energy > 0.1:
+        return [coords]
+    else:
+        return [coords, newpos]
+
+    #####################################################
+
     delta_axial_likeliness = new_axial_likeliness - starting_axial_likeliness
     if starting_axial_likeliness < 0.001 and new_axial_likeliness < 0.001: # no subs?
         return [coords] # avoids expanding nr confs when unnecessary

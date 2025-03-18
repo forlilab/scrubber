@@ -747,7 +747,7 @@ def gen3d(
     else:
         coords_list = []
         [coords_list.extend(fix_rings(mol, c)) for c in etkdg_coords]
-
+         
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):

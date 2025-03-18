@@ -7,6 +7,9 @@ from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.PropertyMol import PropertyMol
 
+from rdkit.Chem.rdchem import Mol 
+from rdkit.Chem import AllChem
+
 from ..common import ScrubberBase, copy_mol_properties
 # from .ringcorners import RingManager
 
@@ -413,3 +416,32 @@ class ParallelGeometryGenerator():
             # print("NOW->", w)
         # for i in range(self._queue_size):
         #     self.queue_out.put(None)
+
+
+def optimize_conformers(mol: Mol, use_mmff: bool =True):
+    optimized_energies = []
+    
+    for conf_id in range(mol.GetNumConformers()):
+        if use_mmff and AllChem.MMFFHasAllMoleculeParams(mol):
+            ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
+        else:
+            ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
+        
+        ff.Minimize()
+        energy = ff.CalcEnergy()
+        optimized_energies.append((conf_id, energy))
+    
+    return optimized_energies
+
+def add_conformers_to_mol(mol: Mol, conf_coords_list):
+    mol = Chem.Mol(mol)  # Make a copy to avoid modifying the original mol
+    mol.RemoveAllConformers()  # Clear any existing conformers
+
+    for conf_id, coords in enumerate(conf_coords_list):
+        conf = Chem.Conformer(mol.GetNumAtoms())
+        for i, (x, y, z) in enumerate(coords):
+            conf.SetAtomPosition(i, (float(x), float(y), float(z)))
+        conf.SetId(conf_id)
+        mol.AddConformer(conf, assignId=True)
+
+    return mol
