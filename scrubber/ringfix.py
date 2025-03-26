@@ -368,7 +368,6 @@ def expand_reasonable_chairs(
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
 
-
     if (use_energy): 
         ## calculate correct conformation by energy comparison ######
         ## MMFF94 forcefield

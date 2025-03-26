@@ -417,19 +417,26 @@ class ParallelGeometryGenerator():
         # for i in range(self._queue_size):
         #     self.queue_out.put(None)
 
+from rdkit.ForceField.rdForceField import ForceField
 
 def optimize_conformers(mol: Mol, use_mmff: bool =True):
     optimized_energies = []
     
     for conf_id in range(mol.GetNumConformers()):
         if use_mmff and AllChem.MMFFHasAllMoleculeParams(mol):
-            ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
+            ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
         else:
-            ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
+            ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
         
-        ff.Minimize()
-        energy = ff.CalcEnergy()
-        optimized_energies.append((conf_id, energy))
+        success = ff.Minimize(maxIts=400)
+        # Check if minimization is successful. 
+        if success == 0:
+            energy = ff.CalcEnergy()
+            optimized_energies.append((conf_id, energy))
+        else:
+            ff.Minimize(maxIts=800)
+            energy == ff.CalcEnergy()
+            optimized_energies.append((conf_id, energy))
     
     return optimized_energies
 

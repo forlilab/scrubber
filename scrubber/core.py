@@ -754,12 +754,14 @@ def gen3d(
 
     mol.RemoveAllConformers()  # to be added back after ringfix
 
+
     if skip_ringfix:
         coords_list = etkdg_coords
     else:
         coords_list = []
         [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug)) for c in etkdg_coords]
-         
+   
+    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):
@@ -786,6 +788,7 @@ def gen3d(
         _energies = optimize_func(mol, maxIters=max_ff_iter)
         energies = [e[1] for e in _energies]
 
+    
     best_energy_index = min(zip(cids, energies), key=lambda x: x[1])[0]
     final_mol = _ConfToMol(mol, best_energy_index)
 
