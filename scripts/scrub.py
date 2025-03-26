@@ -229,6 +229,8 @@ geom.add_argument("--etkdg_rng_seed", help="seed for random number generator use
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
+geom.add_argument("--no_energy_min", help="do not use FF energy minimization to determine optimal conformer", action="store_true")
+geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -327,6 +329,7 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
+
 scrub = Scrub(
     ph_low,
     ph_high,
@@ -343,6 +346,9 @@ scrub = Scrub(
     numconfs = args.numconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     ff=args.ff,
+    use_energy=not args.no_energy_min,
+    energy_threshold=args.energy_threshold,
+    debug=args.debug
 )
 
 counter = {

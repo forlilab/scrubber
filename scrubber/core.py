@@ -499,6 +499,9 @@ class Scrub:
         numconfs=1,
         etkdg_rng_seed=None,
         ff="mmff94s",
+        use_energy=True,
+        energy_threshold=0.5,
+        debug=False
     ):
         self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
         self.tautomerizer = Tautomerizer.from_default_data_files()
@@ -511,6 +514,8 @@ class Scrub:
         self.skip_ringfix = (
             skip_ringfix  # not avoiding negative to pass directly to gen3d
         )
+        self.use_energy = use_energy
+        self.energy_threshold = energy_threshold
         self.do_gen3d = not skip_gen3d
         self.template = template
         self.template_smarts = template_smarts
@@ -521,6 +526,7 @@ class Scrub:
             etkdg_rng_seed if etkdg_rng_seed else random.randint(0, 1000000)
         )
         self.ff = ff
+        self.debug = debug
 
         if ff == "espaloma":
             self.espaloma = EspalomaMinimizer()
@@ -561,6 +567,9 @@ class Scrub:
                     espaloma=self.espaloma,
                     template=self.template,
                     template_smarts=self.template_smarts,
+                    use_energy = self.use_energy,
+                    energy_threshold = self.energy_threshold,
+                    debug=self.debug
                 )
                 output_mol_list.append(mol_out)
         elif self.do_gen2d:  # useful to write SD files
@@ -709,6 +718,9 @@ def gen3d(
     espaloma=None,
     template=None,
     template_smarts=None,
+    use_energy=True,
+    energy_threshold=0.5,
+    debug=False
 ):
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
@@ -746,7 +758,7 @@ def gen3d(
         coords_list = etkdg_coords
     else:
         coords_list = []
-        [coords_list.extend(fix_rings(mol, c)) for c in etkdg_coords]
+        [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug)) for c in etkdg_coords]
          
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
