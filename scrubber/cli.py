@@ -1,5 +1,9 @@
 import multiprocessing
 import argparse
+import tomllib
+import sys
+
+## This file is mostly not used. 
 
 # provide method to convert strings into boolean
 from .transform.isomer import MoleculeIsomers
@@ -799,3 +803,118 @@ extra_options = {
         "default": False,
     },
 }
+
+
+def colorize(text, color_code):
+    """ Colorize terminal text"""
+    return f"\033[{color_code}m{text}\033[0m"
+
+def get_default_args(list_parsers: list[argparse.ArgumentParser]) -> dict:
+    """
+    Extract dictionary of CLI arguments for which there is a default value. 
+    """
+
+    default_args = {}
+    for parser in list_parsers:
+        for action in parser._actions:
+            if action.default is not None and action.default != argparse.SUPPRESS:
+                default_args[action.dest] = action.default
+
+    return default_args
+
+
+def override_defaults(argv: list, toml_args: dict, default_args: dict) -> dict:
+    """
+    Override default values if 1) where not provided through CLI
+    and 2) where provided in TOML.  
+
+    """
+
+    # grab keys from default arguments. 
+    total_args = [k for k in default_args] 
+    
+    # remove dashes from argv
+    argv_nd = list(map(lambda x: x.lstrip('-'), argv))
+    
+    # filter defaults not provided in cli
+    args_to_check = list(filter((lambda x: x not in argv), total_args))
+
+    # filter toml_args with only the keys present in the above list. 
+    filtered_toml_args = {key: toml_args[key] for key in args_to_check if key in toml_args}
+
+    return filtered_toml_args
+
+def get_valid_args(list_parsers: list[argparse.ArgumentParser])->list:
+    """
+    Returns list of all the allowed CLI options.
+    """
+
+    valid_args = []
+    for parser in list_parsers:
+        for action in parser._actions:
+            if action.dest != "help":
+                valid_args.append(action.dest)
+
+    return valid_args
+
+        
+
+def validate_toml_keys(toml_args, valid_keys):
+    """
+    Validates the keys in the TOML file against valid argparse arguments.
+
+    Args:
+        toml_args (dict): The arguments from the TOML file.
+        valid_keys (set): The set of valid argument names.
+
+    Raises:
+        SystemExit: If invalid keys are found in the TOML file.
+    """
+    invalid_keys = [key for key in toml_args if key not in valid_keys]
+
+    if invalid_keys:
+        sys.exit(
+            f"\nError: Invalid keys in TOML file: {colorize(', '.join(invalid_keys), 31)}. \n"
+            f"Allowed keys are: {colorize(', '.join(valid_keys), 32)}."
+        )
+
+
+def parse_toml(argv: list, args: argparse.Namespace, default_args: dict, valid_keys: list)-> argparse.Namespace:
+    """
+    Read toml file from the argument list. This function assumes the
+    `args` variable has already been check and contains a toml as input. 
+    """
+
+    # convert to dict for checking against toml input 
+    dict_args = vars(args)
+
+    toml_args = {}
+
+    # read toml 
+    with open(args.input, "rb") as f:
+        toml_args = tomllib.load(f)
+
+    # validate toml for correct inputs
+    validate_toml_keys(toml_args, valid_keys)
+
+    # replace defaults not provided in CLI but provided in toml
+    filtered_toml = override_defaults(argv, toml_args, default_args)
+    for key, value in filtered_toml.items():
+        dict_args[key] = value
+
+
+    # eliminate duplicates; commmand line arguments always take precedence. 
+    for key, value in toml_args.items():
+        if key not in dict_args or dict_args[key] is None:
+            dict_args[key] = value
+
+
+
+    # replace arg.input with whatever is in the toml file
+    dict_args['input'] = toml_args['input']
+
+
+    # finally, box all args back into Namespace object. 
+    args = argparse.Namespace(**dict_args)
+
+    return args

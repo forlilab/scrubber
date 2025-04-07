@@ -1,0 +1,19 @@
+# comment
+input = ["CC(=O)OC1=CC=CC=C1C(=O)O",
+"CC(=O)OCC[N+](C)(C)C"	,
+"CC(C[N+](C)(C)C)OC(=O)C"	,
+"O=C1CCCN1CC#CC[N+](C)(C)C"	,
+"NC(=O)OCC[N+](C)(C)C"	,
+"CC(C[N+](C)(C)C)OC(=O)N"	,
+"Cc1ccc(o1)C[N+](C)(C)C" ,
+"COC(=O)C1=CCCN(C1)C" ,
+"O=C1CCCN1CC#CCN1CCCC1"	,
+"CON=CC1=CCCN(C1)C"	,
+"CN1CC(=CCC1)C(=O)OCC#C",
+"CCC1C(=O)OCC1Cc1cncn1C",
+"CC(=O)OC1C[NH+]2CCC1CC2"
+]
+
+out_fname = "multiple_molecules.sdf"
+ph = 6.0 
+cpu = 0

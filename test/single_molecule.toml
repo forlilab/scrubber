@@ -1,0 +1,9 @@
+# comment
+input = "CC(=O)OC1=CC=CC=C1C(=O)O"
+out_fname = "single_molecule.sdf"
+
+ph = 6.0 
+skip_acidbase = false
+skip_tautomers = true
+
+cpu = 1

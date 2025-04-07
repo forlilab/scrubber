@@ -1,0 +1,12 @@
+# This file provides an invalid key
+# it should error out. 
+invalid_key = "irrelevant"
+
+input = "CC(=O)OC1=CC=CC=C1C(=O)O"
+out_fname = "irrelevant.sdf"
+
+ph = 6.0 
+skip_acidbase = false
+skip_tautomers = true
+
+cpu = 1

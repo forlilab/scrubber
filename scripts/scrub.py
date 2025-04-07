@@ -10,6 +10,7 @@ import sys
 
 from scrubber import Scrub
 from scrubber import SMIMolSupplierWrapper
+from scrubber.cli import parse_toml, get_default_args, get_valid_args
 
 from rdkit import Chem
 from rdkit import RDLogger
@@ -201,7 +202,7 @@ parser_essential = argparse.ArgumentParser(description="Protonate molecules and 
 parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxsmiles) or SMILES string")
 
 basic = parser_essential.add_argument_group("options")
-basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
+basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)")
 basic.add_argument("--write_failed_mols", help="filename for failed molecules (.sdf)")
 basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
 basic.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
@@ -247,6 +248,26 @@ args_essential, remaining_args = parser_essential.parse_known_args()
 args_advanced = parser_advanced.parse_args(remaining_args)
 args = argparse.Namespace(**vars(args_essential), **vars(args_advanced))
 
+
+# get default and all valid command line arguments for toml checking
+default_args = get_default_args([parser_essential, parser_advanced])
+valid_args = get_valid_args([parser_essential, parser_advanced])
+
+# check for toml file and parse it
+extension = pathlib.Path(args.input).suffix
+if extension == ".toml": 
+    args = parse_toml(sys.argv, args, default_args, valid_args)
+
+
+# Check that input and output has been provided. 
+if args.out_fname == None or args.input == None:
+    sys.exit(
+"""
+input and -o/-out_fname are required arguments. 
+Please include them through the cli interface or inside the .toml file. 
+"""
+)
+
 if args.ph_low is None and args.ph_high is None:
     ph_low = args.ph
     ph_high = args.ph
@@ -258,7 +279,10 @@ else:
     sys.exit()
 
 # input
-extension = pathlib.Path(args.input).suffix
+extension = ""
+if not isinstance(args.input, list):
+    extension = pathlib.Path(args.input).suffix
+
 if extension == ".sdf":
     supplier = Chem.SDMolSupplier(args.input)
 elif extension == ".mol":
@@ -268,13 +292,28 @@ elif extension == ".smi":
 elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
 else:
-    mol = Chem.MolFromSmiles(args.input)
-    if mol is None:
-        print("Input parsed as SMILES string, but conversion to RDKit mol failed.")
-        print("The SMILES might be incorrect.")
-        print("If you want to pass a filename, its extension must be .sdf/.mol/.smi.")
-        sys.exit()
-    supplier = [mol]
+    # check if list of smiles is given in toml file. 
+    if isinstance(args.input, list):
+        inputs: list[str] = args.input
+        supplier = []
+        for inp in inputs:
+            m = Chem.MolFromSmiles(inp)
+            if m == None:
+                print(f"RDKit failed to parse the following SMILES: {inp}")
+                print(f"This molecule will be ignored. Continuing with the rest...")
+            else:
+                supplier.append(m)
+        if len(supplier) == 0:
+            print("No valid SMILES string was provided. ")
+            sys.exit()
+    else:
+        mol = Chem.MolFromSmiles(args.input)
+        if mol is None:
+            print("Input parsed as SMILES string, but conversion to RDKit mol failed.")
+            print("The SMILES might be incorrect.")
+            print("If you want to pass a filename, its extension must be .sdf/.mol/.smi.")
+            sys.exit()
+        supplier = [mol]
 
 if args.template is not None:
     extension_template = pathlib.Path(args.template).suffix
@@ -377,7 +416,7 @@ def scrub_and_debug(input_mol, _=None):
     isomer_list = scrub(input_mol)
     return (isomer_list, log)
 
-def write_and_log(isomer_list, log, counter):
+def write_and_log(w, isomer_list, log, counter):
     counter["supplied"] += 1
     if log["input_mol_none"]:
         counter["rdkit_nope"] += 1
@@ -417,12 +456,13 @@ else:
     scrub_fn = scrub_and_catch_errors
     sdwriter_failures = None
 
-if __name__ == '__main__':
+
+def main():
     with Writer(args.out_fname) as w:
         if args.cpu == 1:
             for input_mol in supplier:
                 isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
-                write_and_log(isomer_list, log, counter)
+                write_and_log(w, isomer_list, log, counter)
         else:
             if args.cpu < 1:
                 nr_proc = multiprocessing.cpu_count()
@@ -430,7 +470,7 @@ if __name__ == '__main__':
                 nr_proc = args.cpu
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
             for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
-                write_and_log(isomer_list, log, counter)
+                write_and_log(w, isomer_list, log, counter)
 
 
     if sdwriter_failures is not None:
@@ -445,3 +485,6 @@ if __name__ == '__main__':
         with open(fname, "w") as f:
             json.dump(supplier.names, f)
         print("Done.")
+
+if __name__ == '__main__':
+    main()

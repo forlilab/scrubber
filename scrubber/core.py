@@ -479,7 +479,9 @@ class ScrubberCore(object):
             else:
                 curr_target[k] = v
 
-
+################################
+# code from here up is not used. 
+##############################3
 class Scrub:
 
     def __init__(

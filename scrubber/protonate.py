@@ -19,15 +19,15 @@ class AcidBaseConjugator:
         mol_list = [input_mol]
         for r in self.pka_reactions:
             if ph_range_high < r["pka"]:
-                mol_list = [convert_exhaustive(mol, r["rxn_gain_h"]) for mol in mol_list]
+                mol_list = [convert_exhaustive(mol, r["rxn_gain_h"], r["pka"]) for mol in mol_list]
             elif ph_range_low > r["pka"]:
-                mol_list = [convert_exhaustive(mol, r["rxn_lose_h"]) for mol in mol_list]
+                mol_list = [convert_exhaustive(mol, r["rxn_lose_h"], r["pka"]) for mol in mol_list]
             else: # keep both states for each transformation
                 tmp = UniqueMoleculeContainer()
                 for mol in mol_list:
                     tmp.add(mol)
-                    convert_recursive(mol, r["rxn_gain_h"], tmp)
-                    convert_recursive(mol, r["rxn_lose_h"], tmp)
+                    convert_recursive(mol, r["rxn_gain_h"], tmp, r["pka"])
+                    convert_recursive(mol, r["rxn_lose_h"], tmp, r["pka"])
                 mol_list = [mol for mol in tmp]
         for mol in mol_list:
             copy_mol_props(input_mol, mol)
@@ -167,13 +167,14 @@ def react_and_sanitize(mol, rxn):
     return output_products
 
 
-def convert_recursive(mol, rxn, container):
+def convert_recursive(mol, rxn, container, pka):
     for product in react_and_sanitize(mol, rxn):
         container.add(product)
-        convert_recursive(product, rxn, container)
+        product.SetProp("pKa", str(pka))
+        convert_recursive(product, rxn, container, pka)
 
 
-def convert_exhaustive(mol, rxn):
+def convert_exhaustive(mol, rxn, pka):
     """
         Returns exactly one molecule:
             - the product when the reaction occurs and sanitization succeeds,
@@ -196,6 +197,7 @@ def convert_exhaustive(mol, rxn):
         products = products_list[0]
         product = products[0] # nr products == NumProductTemplates == 1
         try:
+            product.SetProp("pKa", str(pka)) 
             Chem.SanitizeMol(product)
         # the following exceptions arise often with Chem.SanitizeMol
         except Chem.AtomValenceException:
@@ -203,7 +205,7 @@ def convert_exhaustive(mol, rxn):
         except Chem.KekulizeException:
             return mol
         # run reaction again with the product to return 
-        return convert_exhaustive(product, rxn)
+        return convert_exhaustive(product, rxn, pka)
     else:
         raise RuntimeError("RunReactants(maxProducts=1) returned %d products" % len(products_list))
 
@@ -227,10 +229,10 @@ def enumerate_pka_fewer_combos(mol, pka_reactions, ph_range_low, ph_range_high):
         tmp = set()
         if ph_range_low <= r["pka"]:
             for mol in mol_set:
-                tmp.add(convert_exhaustive(mol, r["rxn_gain_h"]))
+                tmp.add(convert_exhaustive(mol, r["rxn_gain_h"], r["pka"]))
         if ph_range_high >= r["pka"]:
             for mol in mol_set:
-                tmp.add(convert_exhaustive(mol, r["rxn_lose_h"]))
+                tmp.add(convert_exhaustive(mol, r["rxn_lose_h"], r["pka"]))
         mol_set = [mol for mol in tmp]
     return mol_set
 

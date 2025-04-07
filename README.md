@@ -64,3 +64,33 @@ CCC good4bbq
 CCO alsogood4bbq
 c1cccnc1CC(=O)C a_ketone
 ```
+
+## Using a .toml file
+
+Another way to use `scrub.py` is to place all command line options inside 
+a .toml input file:
+
+```toml
+input = "c1cc[nH]c(=O)c1"
+out_fname = "output.sdf"
+ph = 5
+skip_gen3d = true
+```
+
+This can be executed with `scrub.py input.toml` as usual. 
+
+This simplifies the reusability of the same command line options. Additionally, 
+multiple SMILES strings can be placed as an array inside the .toml file: 
+
+```toml
+input = [
+    "c1cc[nH]c(=O)c1",
+    "CC(=O)O",
+    "c1cccnc1CC(=O)C"
+]
+out_fname = "output.sdf"
+ph = 5
+```
+
+Of course, you may still pass additional command line arguments after the toml input file.
+The command line options always take precedence over any options included in the toml file. 
