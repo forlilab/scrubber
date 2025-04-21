@@ -2,10 +2,9 @@ import numpy as np
 import math
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
+from rdkit.Chem import AllChem
 import random
 
-
-from .geom.geometry import optimize_conformers, add_conformers_to_mol
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -38,6 +37,40 @@ def bite_own_tail_recursively(mol, seed_atom_idx, visited, tail_indices):
         visited.append(idx)
         does_bite |= bite_own_tail_recursively(mol, idx, visited, tail_indices)
     return does_bite
+
+def optimize_conformers(mol: Mol, use_mmff: bool =True):
+    optimized_energies = []
+    
+    for conf_id in range(mol.GetNumConformers()):
+        if use_mmff and AllChem.MMFFHasAllMoleculeParams(mol):
+            ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
+        else:
+            ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
+        
+        success = ff.Minimize(maxIts=400)
+        # Check if minimization is successful. 
+        if success == 0:
+            energy = ff.CalcEnergy()
+            optimized_energies.append((conf_id, energy))
+        else:
+            ff.Minimize(maxIts=800)
+            energy == ff.CalcEnergy()
+            optimized_energies.append((conf_id, energy))
+    
+    return optimized_energies
+
+def add_conformers_to_mol(mol: Mol, conf_coords_list):
+    mol = Chem.Mol(mol)  # Make a copy to avoid modifying the original mol
+    mol.RemoveAllConformers()  # Clear any existing conformers
+
+    for conf_id, coords in enumerate(conf_coords_list):
+        conf = Chem.Conformer(mol.GetNumAtoms())
+        for i, (x, y, z) in enumerate(coords):
+            conf.SetAtomPosition(i, (float(x), float(y), float(z)))
+        conf.SetId(conf_id)
+        mol.AddConformer(conf, assignId=True)
+
+    return mol
 
 class RingInfo:
     def __init__(self, coords, indices, debug=False):
