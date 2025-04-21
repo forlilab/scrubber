@@ -32,15 +32,15 @@ def constrained_embeding(
     if ff == "uff":
         getForceField = AllChem.UFFGetMoleculeForceField
     elif ff == "mmff94":
-        getForceField = lambda x: AllChem.MMFFGetMoleculeForceField(
-            x, AllChem.MMFFGetMoleculeProperties(x), confId=confId
+        getForceField = lambda mol, confId: AllChem.MMFFGetMoleculeForceField(
+            mol, AllChem.MMFFGetMoleculeProperties(mol), confId=confId
         )
     # This is just is a minimization with restraints to force the querry mol to match the template. 
     # If you chose espaloma as ff it will still minimize it at the end with that forcefield.
     elif ff == "mmff94s" or ff == "espaloma":
-        getForceField = lambda x: AllChem.MMFFGetMoleculeForceField(
-            x,
-            AllChem.MMFFGetMoleculeProperties(x, mmffVariant="MMFF94s"),
+        getForceField = lambda mol, confId: AllChem.MMFFGetMoleculeForceField(
+            mol,
+            AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94s"),
             confId=confId,
         )
 
