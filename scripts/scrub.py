@@ -229,7 +229,7 @@ geom.add_argument("--etkdg_rng_seed", help="seed for random number generator use
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
-geom.add_argument("--no_energy_min", help="do not use FF energy minimization to determine optimal conformer", action="store_true")
+geom.add_argument("--ring_minimize", help="do not use FF energy minimization to determine optimal ring conformer", action="store_true")
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
@@ -329,6 +329,12 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
+# if ring_minimize is chosen, then numconfs is automatically 3
+if args.ring_minimize:
+    nconfs = 3
+else:
+    nconfs = args.numconfs
+
 
 scrub = Scrub(
     ph_low,
@@ -343,10 +349,10 @@ scrub = Scrub(
     template_smarts=template_smarts,
     do_gen2d=do_gen2d,
     max_ff_iter=args.max_ff_iter,
-    numconfs = args.numconfs,
+    numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     ff=args.ff,
-    use_energy=not args.no_energy_min,
+    use_energy=args.ring_minimize,
     energy_threshold=args.energy_threshold,
     debug=args.debug
 )

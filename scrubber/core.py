@@ -17,11 +17,13 @@ from rdkit.Chem import rdDistGeom
 from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Geometry import Point3D
 
+
 from .storage import MoleculeProvider
 from .storage import MoleculeStorage
 from .storage import MoleculeIssueStorage
 from .geom.geometry import ParallelGeometryGenerator
 from .geom.geometry import GeometryGenerator
+from .geom.geometry import find_best_conformer
 from .transform.isomer import MoleculeIsomers
 from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
@@ -499,7 +501,7 @@ class Scrub:
         numconfs=1,
         etkdg_rng_seed=None,
         ff="mmff94s",
-        use_energy=True,
+        use_energy=False,
         energy_threshold=0.5,
         debug=False
     ):
@@ -718,7 +720,7 @@ def gen3d(
     espaloma=None,
     template=None,
     template_smarts=None,
-    use_energy=True,
+    use_energy=False,
     energy_threshold=0.5,
     debug=False
 ):
@@ -734,6 +736,7 @@ def gen3d(
     ps.useMacrocycleTorsions = True
     ps.clearConfs = True
 
+
     if template is not None:
         mol, cids = constrained_embeding(
             query_mol=mol,
@@ -745,7 +748,11 @@ def gen3d(
         )
 
     else:
-        cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
+        # if ring is minimized, take best of numconfs = 3
+        if use_energy:
+            mol, cids = find_best_conformer(mol, ps, numconfs)
+        else:
+            cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
 
     if len(cids) == 0:
         translate_failures(ps.GetFailureCounts())
@@ -754,14 +761,12 @@ def gen3d(
 
     mol.RemoveAllConformers()  # to be added back after ringfix
 
-
     if skip_ringfix:
         coords_list = etkdg_coords
     else:
         coords_list = []
         [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug)) for c in etkdg_coords]
    
-    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):
@@ -787,7 +792,6 @@ def gen3d(
         }[ff]
         _energies = optimize_func(mol, maxIters=max_ff_iter)
         energies = [e[1] for e in _energies]
-
     
     best_energy_index = min(zip(cids, energies), key=lambda x: x[1])[0]
     final_mol = _ConfToMol(mol, best_energy_index)
