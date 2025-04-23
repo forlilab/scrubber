@@ -2,9 +2,12 @@ import numpy as np
 import math
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
+
 from rdkit.Chem import AllChem
 import random
 
+
+from .utils import optimize_conformers, add_conformers_to_mol
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -355,6 +358,7 @@ def expand_reasonable_chairs(
         energy_threshold: float, 
         debug: bool, 
         axial_likeliness_range=0.1):
+    
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -400,25 +404,39 @@ def expand_reasonable_chairs(
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
-
+    
     if (use_energy): 
         ## calculate correct conformation by energy comparison ######
         ## MMFF94 forcefield
-
+        
         if debug:
             print("Optimizing ring geometries")
 
         mol_with_confs = add_conformers_to_mol(mol, [coords, newpos])
-        optimized_energies = optimize_conformers(mol_with_confs)
+        if debug: 
+            oldmol = add_conformers_to_mol(mol, [coords])
+            newmol = add_conformers_to_mol(mol, [newpos])
+
+        
+        optimized_energies = optimize_conformers(mol_with_confs, False)
+        
+        # optimized_energy_old = optimize_conformers(oldmol, False)
+        # optimized_energy_new = optimize_conformers(newmol, False)
+
         # Print the optimized energy values
         old_energy = optimized_energies[0][1]
         new_energy = optimized_energies[1][1]
+        # old_energy = optimized_energy_old[0][1]
+        # new_energy = optimized_energy_new[0][1]
 
         if debug:
-            print(f"Number of conformers: {mol_with_confs.GetNumConformers()}")
-            write_conformers_to_sdf(mol_with_confs, f"rings-{idx}-test.sdf")
-            for conf_id, energy in optimized_energies:
-                print(f"Conformer {conf_id}: Energy = {energy:.4f} kcal/mol")
+            print(f"Old Energy = {old_energy:.4f} kcal/mol")
+            print(f"New Energy = {new_energy:.4f} kcal/mol")
+            # print(f"Number of conformers: {mol_with_confs.GetNumConformers()}")
+            write_conformers_to_sdf(oldmol, f"rings-1-test.sdf")
+            write_conformers_to_sdf(newmol, f"rings-2-test.sdf")
+            # for conf_id, energy in optimized_energies:
+            #     print(f"Conformer {conf_id}: Energy = {energy:.4f} kcal/mol")
                 
 
         if new_energy - old_energy < -energy_threshold:
@@ -570,3 +588,5 @@ def rotation_matrix(axis, theta):
     return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
                      [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+

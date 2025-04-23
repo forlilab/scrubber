@@ -1,17 +1,25 @@
 import multiprocessing
+
+from multiprocessing.synchronize import Event as EventClass
+
 import os
 
 from rdkit import Chem
 from rdkit.Chem import rdDistGeom
 from rdkit.Chem import rdForceFieldHelpers
-from rdkit.Chem.rdchem import Mol 
-from rdkit.Chem import AllChem
+
+from rdkit.Chem import rdMolTransforms
+from rdkit.Chem.PropertyMol import PropertyMol
 from rdkit.Chem import rdMolAlign
 from rdkit.Geometry import Point3D
 
-from rdkit.ForceField.rdForceField import ForceField
+from rdkit.Chem.rdchem import Mol 
+from rdkit.Chem import AllChem
 
+from .common import ScrubberBase, copy_mol_properties
 from .ringfix import fix_rings
+from .utils import find_best_conformer
+
 
 def constrained_embeding(
     query_mol,
@@ -32,15 +40,19 @@ def constrained_embeding(
     if ff == "uff":
         getForceField = AllChem.UFFGetMoleculeForceField
     elif ff == "mmff94":
+
         getForceField = lambda mol, confId: AllChem.MMFFGetMoleculeForceField(
             mol, AllChem.MMFFGetMoleculeProperties(mol), confId=confId
+
         )
     # This is just is a minimization with restraints to force the querry mol to match the template. 
     # If you chose espaloma as ff it will still minimize it at the end with that forcefield.
     elif ff == "mmff94s" or ff == "espaloma":
+
         getForceField = lambda mol, confId: AllChem.MMFFGetMoleculeForceField(
             mol,
             AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94s"),
+
             confId=confId,
         )
 
@@ -148,7 +160,7 @@ def gen3d(
     espaloma=None,
     template=None,
     template_smarts=None,
-    use_energy=True,
+    use_energy=False,
     energy_threshold=0.5,
     debug=False
 ):
@@ -175,7 +187,11 @@ def gen3d(
         )
 
     else:
-        cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
+        # if ring is minimized, take best of numconfs = 3
+        if use_energy:
+            mol, cids = find_best_conformer(mol, ps, numconfs)
+        else:
+            cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
 
     if len(cids) == 0:
         translate_failures(ps.GetFailureCounts())
@@ -184,14 +200,12 @@ def gen3d(
 
     mol.RemoveAllConformers()  # to be added back after ringfix
 
-
     if skip_ringfix:
         coords_list = etkdg_coords
     else:
         coords_list = []
         [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug)) for c in etkdg_coords]
    
-    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):

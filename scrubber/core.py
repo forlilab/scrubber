@@ -6,15 +6,17 @@ import multiprocessing
 # https://pythonspeed.com/articles/python-multiprocessing/ (alterantive to fork() )
 
 import random
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
+
+from .geometry import find_best_conformer
 
 from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
 from .espaloma_minim import EspalomaMinimizer
 from .geometry import gen3d
-
 
 class Scrub:
 
@@ -35,7 +37,7 @@ class Scrub:
         numconfs=1,
         etkdg_rng_seed=None,
         ff="mmff94s",
-        use_energy=True,
+        use_energy=False,
         energy_threshold=0.5,
         debug=False
     ):
@@ -117,3 +119,4 @@ class Scrub:
             output_mol_list = pool
 
         return output_mol_list
+

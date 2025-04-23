@@ -1,6 +1,6 @@
 import multiprocessing
-from rdkit import Chem
 
+from rdkit import Chem
 
 class SMIMolSupplierWrapper:
     """RDKit SMI molecule supplier wrapper."""
