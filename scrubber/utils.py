@@ -59,3 +59,14 @@ def find_best_conformer(mol: Mol, ps, num_confs=3):
     best_mol.AddConformer(conf, assignId=True)
 
     return best_mol, [0]
+
+#debug
+def write_conformers_to_sdf(mol, filename="test.sdf"):
+    writer = Chem.SDWriter(filename)
+    
+    for conf_id in range(mol.GetNumConformers()):
+        mol.SetProp("_Name", f"Conformer {conf_id}")  # Optional: Label conformers
+        writer.write(mol, confId=conf_id)
+    
+    writer.close()
+    print(f"All conformers written to {filename}")

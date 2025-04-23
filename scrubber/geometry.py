@@ -16,7 +16,6 @@ from rdkit.Geometry import Point3D
 from rdkit.Chem.rdchem import Mol 
 from rdkit.Chem import AllChem
 
-from .common import ScrubberBase, copy_mol_properties
 from .ringfix import fix_rings
 from .utils import find_best_conformer
 
