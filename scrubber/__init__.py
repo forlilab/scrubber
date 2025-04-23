@@ -1,6 +1,4 @@
 from . import transform
-from . import geom
-from . import cli
 from . import core
 from . import storage
 from . import common
@@ -13,8 +11,6 @@ from .storage import SMIMolSupplierWrapper
 
 __all__ = [
     "transform",
-    "geom",
-    "cli",
     "core",
     "storage",
     "common",
@@ -23,4 +19,5 @@ __all__ = [
     "fix_rings",
     "Scrub",
     "gen3d",
+    "utils"
 ]

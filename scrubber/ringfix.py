@@ -2,10 +2,9 @@ import numpy as np
 import math
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
-import random
 
 
-from .geom.geometry import optimize_conformers, add_conformers_to_mol
+from .utils import optimize_conformers, add_conformers_to_mol
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -552,3 +551,5 @@ def rotation_matrix(axis, theta):
     return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
                      [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+

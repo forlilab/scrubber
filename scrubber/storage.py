@@ -8,6 +8,8 @@ import time
 
 import threading
 import multiprocessing
+from multiprocessing.connection import Pipe as PipeClass
+from multiprocessing.synchronize import Event as EventClass
 import queue
 import os
 import rdkit
@@ -57,8 +59,8 @@ class MoleculeProvider(ScrubberBase):
         safeparsing: bool = True,
         discarded_datafile: str = None,
         queue_err: multiprocessing.Queue = None,
-        pipe_comm: multiprocessing.Pipe = None,
-        handbrake: multiprocessing.Event = None,
+        pipe_comm: PipeClass = None,
+        handbrake: EventClass = None,
         # use_PropertyMol: bool = True,
         start_count: int = 0,
         end_count: int = -1,
@@ -252,8 +254,8 @@ class MoleculeStorage(ScrubberBase, multiprocessing.Process):
         workers_count: int = 1,
         # disable_rdkit_warnings: bool = True,
         queue: multiprocessing.Queue = None,
-        comm_pipe: multiprocessing.Pipe = None,
-        handbrake: multiprocessing.Event = None,
+        comm_pipe: PipeClass = None,
+        handbrake: EventClass = None,
         _stop_at_defaults=False,
     ):
         self.fname = fname
@@ -648,8 +650,8 @@ class MoleculeIssueStorage(ScrubberBase, multiprocessing.Process):
         # log_from_input: str = None,
         # log_from_process: str = None,
         queue: multiprocessing.Queue = None,
-        comm_pipe: multiprocessing.Pipe = None,
-        handbrake: multiprocessing.Event = None,
+        comm_pipe: PipeClass = None,
+        handbrake: EventClass = None,
         _stop_at_defaults: bool = False,
     ):
         self.log_basename = log_basename
