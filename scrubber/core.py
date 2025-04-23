@@ -5,29 +5,18 @@ import multiprocessing
 # https://sefiks.com/2021/07/05/handling-hang-in-python-multiprocessing/
 # https://pythonspeed.com/articles/python-multiprocessing/ (alterantive to fork() )
 
-# from time import sleep
-# import sys
 import random
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-
-
-
 from .geometry import find_best_conformer
+
 from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
-from .ringfix import fix_rings
 from .espaloma_minim import EspalomaMinimizer
 from .geometry import gen3d
-
-
-"""
-This file contains the core scrubber object
-INSPIRATION: https://xkcd.com/1343/
-"""
 
 class Scrub:
 
@@ -130,3 +119,4 @@ class Scrub:
             output_mol_list = pool
 
         return output_mol_list
+

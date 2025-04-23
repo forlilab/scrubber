@@ -259,6 +259,15 @@ else:
     print("--ph_low and --ph_high work together, either use both or none.")
     sys.exit()
 
+force_single_process = False
+if args.ff == "espaloma":
+    if args.cpu > 1:  # default is zero
+        print("--ff espaloma can't be used with multiprocessing")
+        sys.exit(2)
+    if args.cpu == 0:
+        print("will use only one process because of espaloma")
+        force_single_process = True
+
 # input
 extension = pathlib.Path(args.input).suffix
 if extension == ".sdf":
@@ -431,7 +440,7 @@ else:
 
 if __name__ == '__main__':
     with Writer(args.out_fname) as w:
-        if args.cpu == 1:
+        if args.cpu == 1 or force_single_process:
             for input_mol in supplier:
                 isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
                 write_and_log(isomer_list, log, counter)
