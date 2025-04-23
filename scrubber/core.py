@@ -33,7 +33,7 @@ class Scrub:
         template=None,
         template_smarts=None,
         do_gen2d=False,
-        max_ff_iter=200,
+        max_ff_iter=400,
         numconfs=1,
         etkdg_rng_seed=None,
         ff="mmff94s",

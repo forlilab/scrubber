@@ -152,7 +152,7 @@ def translate_failures(failure_counts):
 def gen3d(
     mol,
     skip_ringfix: bool = False,
-    max_ff_iter: int = 200,
+    max_ff_iter: int = 400,
     etkdg_rng_seed: int = 42,
     numconfs: int = 1,
     ff: str = "mmff94s",
@@ -188,7 +188,7 @@ def gen3d(
     else:
         # if ring is minimized, take best of numconfs = 3
         if use_energy:
-            mol, cids = find_best_conformer(mol, ps, numconfs)
+            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter)
         else:
             cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
 
@@ -203,7 +203,7 @@ def gen3d(
         coords_list = etkdg_coords
     else:
         coords_list = []
-        [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug)) for c in etkdg_coords]
+        [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug, max_ff_iter=max_ff_iter)) for c in etkdg_coords]
    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())

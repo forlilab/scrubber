@@ -223,7 +223,7 @@ acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", 
 acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
 
 geom = parser_advanced.add_argument_group("3D coordinates")
-geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=200)
+geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=400)
 geom.add_argument("--numconfs", help="Number of conformers to generate", type=int, default=1)
 geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")

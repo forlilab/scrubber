@@ -191,7 +191,7 @@ def calc_axial_likeliness(substituents, coords):
     return axial_likeliness
 
 
-def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float, debug=False):
+def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float, debug=False, max_ff_iter: int = 400):
     #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
 
@@ -233,7 +233,7 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, max_ff_iter)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -313,7 +313,8 @@ def expand_reasonable_chairs(
         use_energy: bool, 
         energy_threshold: float, 
         debug: bool, 
-        axial_likeliness_range=0.1):
+        axial_likeliness_range=0.1,
+        max_ff_iter = 400):
     
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
@@ -374,7 +375,7 @@ def expand_reasonable_chairs(
             newmol = add_conformers_to_mol(mol, [newpos])
 
         
-        optimized_energies = optimize_conformers(mol_with_confs, False)
+        optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
         
         # optimized_energy_old = optimize_conformers(oldmol, False)
         # optimized_energy_new = optimize_conformers(newmol, False)

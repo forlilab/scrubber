@@ -6,7 +6,7 @@ from rdkit.Chem import AllChem
 from rdkit.ForceField.rdForceField import ForceField
 
 
-def optimize_conformers(mol: Mol, use_mmff: bool=True):
+def optimize_conformers(mol: Mol, use_mmff: bool=True, max_ff_iter: int = 400):
     optimized_energies = []
     
     for conf_id in range(mol.GetNumConformers()):
@@ -15,14 +15,14 @@ def optimize_conformers(mol: Mol, use_mmff: bool=True):
         else:
             ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
         
-        success = ff.Minimize(maxIts=400)
+        success = ff.Minimize(maxIts=max_ff_iter)
         # print(f"Success: {success}")
         # Check if minimization is successful. 
         if success == 0:
             energy = ff.CalcEnergy()
             optimized_energies.append((conf_id, energy))
         else:
-            ff.Minimize(maxIts=800)
+            ff.Minimize(maxIts=2*max_ff_iter)
             energy == ff.CalcEnergy()
             optimized_energies.append((conf_id, energy))
     
@@ -41,9 +41,9 @@ def add_conformers_to_mol(mol: Mol, conf_coords_list):
 
     return mol
 
-def find_best_conformer(mol: Mol, ps, num_confs=3):
+def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400):
     cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
-    energies = optimize_conformers(mol, False)
+    energies = optimize_conformers(mol, False, max_ff_iter)
     if not energies:
         raise ValueError("No conformers could be optimized during initial generation.")
     
