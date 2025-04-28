@@ -66,8 +66,6 @@ class Scrub:
         self.ff = ff
         self.debug = debug
 
-        print(f"jani debug scrub use energy {use_energy}")
-
         if ff == "espaloma":
             self.espaloma = EspalomaMinimizer()
         else:
