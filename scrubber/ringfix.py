@@ -233,7 +233,7 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, max_ff_iter)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, 0.1, max_ff_iter)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -417,6 +417,7 @@ def expand_reasonable_chairs(
 
 
 def convert_boat_to_chair(mol, coords, idxs, debug):
+
 
     ringinfo = RingInfo(coords, idxs, debug)
     if calc_boat_likeliness(ringinfo) < -2: # chair already

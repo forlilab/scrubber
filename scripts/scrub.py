@@ -224,12 +224,12 @@ acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)"
 
 geom = parser_advanced.add_argument_group("3D coordinates")
 geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=400)
-geom.add_argument("--numconfs", help="Number of conformers to generate", type=int, default=1)
+geom.add_argument("--numconfs", help="Number of conformers to generate", type=int)
 geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
-geom.add_argument("--ring_minimize", help="do not use FF energy minimization to determine optimal ring conformer", action="store_true")
+geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
@@ -339,10 +339,15 @@ else:
     sys.exit()
 
 # if ring_minimize is chosen, then numconfs is automatically 3
-if args.ring_minimize:
+
+if args.ring_minimize and args.numconfs is None:
     nconfs = 3
 else:
-    nconfs = args.numconfs
+    if args.numconfs is None:
+        nconfs = 1
+    else:
+        nconfs = args.numconfs
+
 
 
 scrub = Scrub(
