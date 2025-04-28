@@ -1,6 +1,13 @@
 import numpy as np
 import math
 from rdkit import Chem
+from rdkit.Chem.rdchem import Mol
+
+from rdkit.Chem import AllChem
+import random
+
+
+from .utils import optimize_conformers, add_conformers_to_mol, write_conformers_to_sdf
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -184,9 +191,10 @@ def calc_axial_likeliness(substituents, coords):
     return axial_likeliness
 
 
-def fix_rings(mol, coords, debug=False):
+def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float, debug=False, max_ff_iter: int = 400):
     #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
+
     ring6_smarts = "[*]1[*][*][*][*][*]1"
     amide_smarts = "[NX3]-[CX3]=[O,N,SX1]"
     amide_idxs = mol.GetSubstructMatches(Chem.MolFromSmarts(amide_smarts))
@@ -225,7 +233,7 @@ def fix_rings(mol, coords, debug=False):
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, 0.1, max_ff_iter)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -295,7 +303,19 @@ def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
     else:
         return [input_coords, coords]
 
-def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_likeliness_range=0.1):
+
+def expand_reasonable_chairs(
+        coords: list, 
+        idxs: tuple, 
+        ringinfo: RingInfo, 
+        substituents: dict, 
+        mol: Mol, 
+        use_energy: bool, 
+        energy_threshold: float, 
+        debug: bool, 
+        axial_likeliness_range=0.1,
+        max_ff_iter = 400):
+    
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -341,18 +361,63 @@ def expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, axial_li
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
-    delta_axial_likeliness = new_axial_likeliness - starting_axial_likeliness
-    if starting_axial_likeliness < 0.001 and new_axial_likeliness < 0.001: # no subs?
-        return [coords] # avoids expanding nr confs when unnecessary
-    elif delta_axial_likeliness > axial_likeliness_range:
-        return [coords]
-    elif delta_axial_likeliness < -axial_likeliness_range:
-        return [newpos]
-    else:
-        return [coords, newpos] # new and starting similar, return both
+    
+    if (use_energy): 
+        ## calculate correct conformation by energy comparison ######
+        ## MMFF94 forcefield
+        
+        if debug:
+            print("Optimizing ring geometries")
+
+        mol_with_confs = add_conformers_to_mol(mol, [coords, newpos])
+        if debug: 
+            oldmol = add_conformers_to_mol(mol, [coords])
+            newmol = add_conformers_to_mol(mol, [newpos])
+
+        
+        optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
+        
+        # optimized_energy_old = optimize_conformers(oldmol, False)
+        # optimized_energy_new = optimize_conformers(newmol, False)
+
+        # Print the optimized energy values
+        old_energy = optimized_energies[0][1]
+        new_energy = optimized_energies[1][1]
+        # old_energy = optimized_energy_old[0][1]
+        # new_energy = optimized_energy_new[0][1]
+
+        if debug:
+            print(f"Old Energy = {old_energy:.4f} kcal/mol")
+            print(f"New Energy = {new_energy:.4f} kcal/mol")
+            # print(f"Number of conformers: {mol_with_confs.GetNumConformers()}")
+            write_conformers_to_sdf(oldmol, f"rings-1-test.sdf")
+            write_conformers_to_sdf(newmol, f"rings-2-test.sdf")
+            # for conf_id, energy in optimized_energies:
+            #     print(f"Conformer {conf_id}: Energy = {energy:.4f} kcal/mol")
+                
+
+        if new_energy - old_energy < -energy_threshold:
+            return [newpos]
+        elif new_energy - old_energy > energy_threshold:
+            return [coords]
+        else:
+            return [coords, newpos]
+
+    #####################################################
+    else: 
+        delta_axial_likeliness = new_axial_likeliness - starting_axial_likeliness
+        if starting_axial_likeliness < 0.001 and new_axial_likeliness < 0.001: # no subs?
+            return [coords] # avoids expanding nr confs when unnecessary
+        elif delta_axial_likeliness > axial_likeliness_range:
+            return [coords]
+        elif delta_axial_likeliness < -axial_likeliness_range:
+            return [newpos]
+        else:
+            return [coords, newpos] # new and starting similar, return both
 
 
 def convert_boat_to_chair(mol, coords, idxs, debug):
+
 
     ringinfo = RingInfo(coords, idxs, debug)
     if calc_boat_likeliness(ringinfo) < -2: # chair already
@@ -481,3 +546,5 @@ def rotation_matrix(axis, theta):
     return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
                      [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+

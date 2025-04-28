@@ -1,11 +1,11 @@
 import pathlib
+from importlib.resources import files
 from .common import UniqueMoleculeContainer
-from .common import DATA_PATH
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 
-datapath = pathlib.Path(DATA_PATH) # convert from str to Path
+datapath = files("scrubber") / "data"
 default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
 

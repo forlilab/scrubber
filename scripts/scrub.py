@@ -223,12 +223,14 @@ acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", 
 acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
 
 geom = parser_advanced.add_argument_group("3D coordinates")
-geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=200)
-geom.add_argument("--numconfs", help="Number of conformers to generate", type=int, default=1)
+geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=400)
+geom.add_argument("--numconfs", help="Number of conformers to generate", type=int)
 geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
+geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
+geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -256,6 +258,15 @@ elif args.ph_low is not None and args.ph_high is not None:
 else:
     print("--ph_low and --ph_high work together, either use both or none.")
     sys.exit()
+
+force_single_process = False
+if args.ff == "espaloma":
+    if args.cpu > 1:  # default is zero
+        print("--ff espaloma can't be used with multiprocessing")
+        sys.exit(2)
+    if args.cpu == 0:
+        print("will use only one process because of espaloma")
+        force_single_process = True
 
 # input
 extension = pathlib.Path(args.input).suffix
@@ -327,6 +338,18 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
+# if ring_minimize is chosen, then numconfs is automatically 3
+
+if args.ring_minimize and args.numconfs is None:
+    nconfs = 3
+else:
+    if args.numconfs is None:
+        nconfs = 1
+    else:
+        nconfs = args.numconfs
+
+
+
 scrub = Scrub(
     ph_low,
     ph_high,
@@ -340,9 +363,12 @@ scrub = Scrub(
     template_smarts=template_smarts,
     do_gen2d=do_gen2d,
     max_ff_iter=args.max_ff_iter,
-    numconfs = args.numconfs,
+    numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     ff=args.ff,
+    use_energy=args.ring_minimize,
+    energy_threshold=args.energy_threshold,
+    debug=args.debug
 )
 
 counter = {
@@ -419,7 +445,7 @@ else:
 
 if __name__ == '__main__':
     with Writer(args.out_fname) as w:
-        if args.cpu == 1:
+        if args.cpu == 1 or force_single_process:
             for input_mol in supplier:
                 isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
                 write_and_log(isomer_list, log, counter)
