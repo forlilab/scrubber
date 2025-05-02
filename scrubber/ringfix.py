@@ -2,12 +2,16 @@ import numpy as np
 import math
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
+from typing import List
 
 from rdkit.Chem import AllChem
 import random
 
 
 from .utils import optimize_conformers, add_conformers_to_mol, write_conformers_to_sdf
+from .utils import rotation_matrix
+from . import amine_flip as am
+
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -243,7 +247,52 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
             new_coords = expand_ring6_rot5(coords, idxs, substituents)
             tmp.extend(new_coords)
         coords_list = tmp
+    
+    # check for rotatable ring amine group
+    coords_list = rotate_amine_substituents(mol, coords_list, max_ff_iter, energy_threshold)
+
     return coords_list
+
+
+def rotate_amine_substituents(mol: Mol, 
+                              coords_list: List, 
+                              max_ff_iter: int, 
+                              energy_threshold: float):
+    amine_match = am.find_n_ring_substituents(mol)
+    #jani debug
+    print("jani debug, amine_match: ", amine_match)
+    if amine_match:
+        n_idx, sub1_idx, sub2_idx = amine_match
+        ring_atoms = am.get_ring_atoms(mol, n_idx)
+        tmp = []
+        for coords in coords_list:
+            
+            new_coords =  am.swap_substituents(mol, coords, n_idx, sub1_idx, sub2_idx, ring_atoms)
+
+            mol_with_confs = add_conformers_to_mol(mol, [coords, new_coords])
+            # compare new coords with old coords
+            optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
+        
+            old_energy = optimized_energies[0][1]
+            new_energy = optimized_energies[1][1]
+            print(f"jani debug, initial energy: {old_energy}")
+            print(f"jani debug, initial coords: {am.molToXYZ(mol, coords)}")
+            print(f"jani debug, rotate energy: {new_energy}")
+            print(f"jani debug, rotated coords: {am.molToXYZ(mol, new_coords)}")
+            if new_energy - old_energy < -energy_threshold:
+                tmp.append(new_coords)
+            elif new_energy - old_energy > energy_threshold:
+                tmp.append(coords)
+            else:
+                tmp.append(coords)
+                tmp.append(new_coords)
+
+        print("jani debug tmp")
+        print(tmp)
+        return tmp
+    else:
+        return coords_list
+
 
 
 def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
@@ -528,23 +577,5 @@ def rotate_ring_atom(index, coords, rotaxis, angle, substituents):
     for i in affected:
         coords[i] = np.dot(rotation_matrix(rotaxis, angle), coords[i])
     return coords
-
-def rotation_matrix(axis, theta):
-    """
-    Return the rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians.
-
-    source: https://stackoverflow.com/questions/6802577/rotation-of-3d-vector
-    """
-
-    axis = np.asarray(axis)
-    axis = axis / math.sqrt(np.dot(axis, axis))
-    a = math.cos(theta / 2.0)
-    b, c, d = -axis * math.sin(theta / 2.0)
-    aa, bb, cc, dd = a * a, b * b, c * c, d * d
-    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
-    return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                     [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                     [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
 

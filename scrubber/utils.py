@@ -4,7 +4,9 @@ from rdkit.Chem import rdDistGeom
 from rdkit.Chem import AllChem
 
 from rdkit.ForceField.rdForceField import ForceField
+import math
 
+import numpy as np
 
 def optimize_conformers(mol: Mol, use_mmff: bool=True, max_ff_iter: int = 400):
     optimized_energies = []
@@ -70,3 +72,22 @@ def write_conformers_to_sdf(mol, filename="test.sdf"):
     
     writer.close()
     print(f"All conformers written to {filename}")
+
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians.
+
+    source: https://stackoverflow.com/questions/6802577/rotation-of-3d-vector
+    """
+
+    axis = np.asarray(axis)
+    axis = axis / math.sqrt(np.dot(axis, axis))
+    a = math.cos(theta / 2.0)
+    b, c, d = -axis * math.sin(theta / 2.0)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+    return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+                     [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                     [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])

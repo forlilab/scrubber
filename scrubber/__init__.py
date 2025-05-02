@@ -19,5 +19,6 @@ __all__ = [
     "Scrub",
     "gen3d",
     "SMIMolSupplierWrapper",
-    "utils"
+    "utils",
+    "amine_flip.py"
 ]
