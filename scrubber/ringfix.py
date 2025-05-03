@@ -260,6 +260,11 @@ def rotate_amine_substituents(mol: Mol,
                               energy_threshold: float, 
                               debug: bool):
     
+    """
+    Identify amine group in ring structure and swap equatorial and axial
+    substituents. Determine optimal structure with energy minimization. 
+    """
+    
     amine_match = am.find_n_ring_substituents(mol)
 
     if amine_match:
@@ -276,12 +281,14 @@ def rotate_amine_substituents(mol: Mol,
         
             old_energy = optimized_energies[0][1]
             new_energy = optimized_energies[1][1]
+
             if debug:
                 print(f"Initial energy: {old_energy}")
                 print(f"Initial coords:\n {am.molToXYZ(mol, coords)}")
                 print(f"Rotated energy: {new_energy}")
                 print(f"Rotated coords:\n {am.molToXYZ(mol, new_coords)}")
 
+            # determine optimal structure within energy threshold. 
             if new_energy - old_energy < -energy_threshold:
                 tmp.append(new_coords)
             elif new_energy - old_energy > energy_threshold:

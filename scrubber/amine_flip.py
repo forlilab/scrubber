@@ -5,7 +5,7 @@ from .utils import rotation_matrix
 
 def find_n_ring_substituents(mol):
     """
-    Find a positively charged N atom in a 5- or 6-membered ring
+    Find a positively charged N atom in a ring
     with two substituents (non-ring atoms).
     Return (n_idx, sub1_idx, sub2_idx) if found, else None.
     """
