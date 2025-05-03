@@ -106,14 +106,6 @@ def swap_substituents(mol, coords, n_idx, sub1_idx, sub2_idx, ring_atom_indices)
 
     return coords_new
 
-def rotate_ring_atom(index, coords, rotaxis, angle, substituents):
-    affected = set([index])
-    # for _, info in substituents[index].items():
-    #     affected = affected.union(info["downstream_indices"])
-    new_coords = coords.copy()
-    for i in affected:
-        new_coords[i] = np.dot(rotation_matrix(rotaxis, angle), coords[i])
-    return coords
 
 def get_ring_atoms(mol, n_idx):
     """

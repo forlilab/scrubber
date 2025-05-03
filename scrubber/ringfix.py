@@ -249,7 +249,7 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
         coords_list = tmp
     
     # check for rotatable ring amine group
-    coords_list = rotate_amine_substituents(mol, coords_list, max_ff_iter, energy_threshold)
+    coords_list = rotate_amine_substituents(mol, coords_list, max_ff_iter, energy_threshold, debug)
 
     return coords_list
 
@@ -257,10 +257,11 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
 def rotate_amine_substituents(mol: Mol, 
                               coords_list: List, 
                               max_ff_iter: int, 
-                              energy_threshold: float):
+                              energy_threshold: float, 
+                              debug: bool):
+    
     amine_match = am.find_n_ring_substituents(mol)
-    #jani debug
-    print("jani debug, amine_match: ", amine_match)
+
     if amine_match:
         n_idx, sub1_idx, sub2_idx = amine_match
         ring_atoms = am.get_ring_atoms(mol, n_idx)
@@ -275,10 +276,12 @@ def rotate_amine_substituents(mol: Mol,
         
             old_energy = optimized_energies[0][1]
             new_energy = optimized_energies[1][1]
-            print(f"jani debug, initial energy: {old_energy}")
-            print(f"jani debug, initial coords: {am.molToXYZ(mol, coords)}")
-            print(f"jani debug, rotate energy: {new_energy}")
-            print(f"jani debug, rotated coords: {am.molToXYZ(mol, new_coords)}")
+            if debug:
+                print(f"Initial energy: {old_energy}")
+                print(f"Initial coords:\n {am.molToXYZ(mol, coords)}")
+                print(f"Rotated energy: {new_energy}")
+                print(f"Rotated coords:\n {am.molToXYZ(mol, new_coords)}")
+
             if new_energy - old_energy < -energy_threshold:
                 tmp.append(new_coords)
             elif new_energy - old_energy > energy_threshold:
@@ -287,8 +290,6 @@ def rotate_amine_substituents(mol: Mol,
                 tmp.append(coords)
                 tmp.append(new_coords)
 
-        print("jani debug tmp")
-        print(tmp)
         return tmp
     else:
         return coords_list
