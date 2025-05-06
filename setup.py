@@ -31,7 +31,7 @@ setup(
     scripts=[
         "scripts/scrub.py",
     ],
-    package_data={"scrubber": ["data/*"]},
+    package_data={"molscrub": ["data/*"]},
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
