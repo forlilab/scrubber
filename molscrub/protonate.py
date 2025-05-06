@@ -5,7 +5,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 
-datapath = files("scrubber") / "data"
+datapath = files("molscrub") / "data"
 default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
 

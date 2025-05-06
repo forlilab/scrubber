@@ -17,7 +17,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'scrubber'
+project = 'molscrub'
 copyright = '2022, Author'
 author = 'Author'
 
