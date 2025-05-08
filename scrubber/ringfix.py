@@ -247,9 +247,6 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
             new_coords = expand_ring6_rot5(coords, idxs, substituents)
             tmp.extend(new_coords)
         coords_list = tmp
-    
-    # check for rotatable ring amine group
-    coords_list = rotate_amine_substituents(mol, coords_list, max_ff_iter, energy_threshold, debug)
 
     return coords_list
 
@@ -270,9 +267,6 @@ def rotate_amine_substituents(mol: Mol,
     if len(amine_match) == 0:
         return coords_list
     
-    print("jani debug, amine_match")
-    print(amine_match)
-
     for match in amine_match:
         if len(match) == 3:
             n_idx, sub1_idx, sub2_idx = match
@@ -383,6 +377,11 @@ def expand_reasonable_chairs(
         axial_likeliness_range=0.1,
         max_ff_iter = 400):
     
+
+    # check for amine flip in initially supplied coords
+    c = rotate_amine_substituents(mol, [coords], max_ff_iter, energy_threshold, debug)
+    coords = c[0]
+
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -429,8 +428,11 @@ def expand_reasonable_chairs(
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
 
+    # now check for amine flip on new coordinates
+    c = rotate_amine_substituents(mol, [newpos], max_ff_iter, energy_threshold, debug)
+    newpos = c[0]
+
     # a little more debugging
-    debug=True
     if debug:
         print("Mol 1")
         print(am.molToXYZ(mol, coords))

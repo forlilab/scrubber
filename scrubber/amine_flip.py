@@ -13,8 +13,6 @@ def find_n_ring_substituents(mol):
     patt = Chem.MolFromSmarts(smarts)
 
     matches = mol.GetSubstructMatches(patt)
-    print("jani debug, matches")
-    print(matches)
 
     if not matches:
         return None
