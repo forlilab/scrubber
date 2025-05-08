@@ -15,6 +15,8 @@ def find_n_ring_substituents(mol):
     matches = mol.GetSubstructMatches(patt)
     if not matches:
         return None
+    
+    amines = []
 
     for match in matches:
         n_idx = match[0]
@@ -27,9 +29,9 @@ def find_n_ring_substituents(mol):
         if len(ring_neighbors) == 2 and len(sub_neighbors) == 2:
             sub1_idx = sub_neighbors[0].GetIdx()
             sub2_idx = sub_neighbors[1].GetIdx()
-            return (n_idx, sub1_idx, sub2_idx)
+            amines.append((n_idx, sub1_idx, sub2_idx))
 
-    return None
+    return amines
 
 def get_substituent_tree(mol, root_idx, exclude_idx):
     """

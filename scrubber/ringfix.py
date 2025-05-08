@@ -267,8 +267,11 @@ def rotate_amine_substituents(mol: Mol,
     
     amine_match = am.find_n_ring_substituents(mol)
 
-    if amine_match:
-        n_idx, sub1_idx, sub2_idx = amine_match
+    if len(amine_match) == 0:
+        return coords_list
+
+    for match in amine_match:
+        n_idx, sub1_idx, sub2_idx = match
         ring_atoms = am.get_ring_atoms(mol, n_idx)
         tmp = []
         for coords in coords_list:
@@ -297,9 +300,9 @@ def rotate_amine_substituents(mol: Mol,
                 tmp.append(coords)
                 tmp.append(new_coords)
 
-        return tmp
-    else:
-        return coords_list
+        coords_list = tmp
+
+    return coords_list
 
 
 
@@ -418,8 +421,15 @@ def expand_reasonable_chairs(
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
-    
-    if (use_energy): 
+
+    # a little more debugging
+    if debug:
+        print("Mol 1")
+        print(am.molToXYZ(mol, coords))
+        print("Mol 2")
+        print(am.molToXYZ(mol, newpos))
+
+    if (use_energy):
         ## calculate correct conformation by energy comparison ######
         ## MMFF94 forcefield
         
