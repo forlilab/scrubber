@@ -9,10 +9,13 @@ def find_n_ring_substituents(mol):
     with two substituents (non-ring atoms).
     Return (n_idx, sub1_idx, sub2_idx) if found, else None.
     """
-    smarts = '[NRX4]'
+    smarts = '[NRX4,NRX3]'
     patt = Chem.MolFromSmarts(smarts)
 
     matches = mol.GetSubstructMatches(patt)
+    print("jani debug, matches")
+    print(matches)
+
     if not matches:
         return None
     
@@ -30,6 +33,9 @@ def find_n_ring_substituents(mol):
             sub1_idx = sub_neighbors[0].GetIdx()
             sub2_idx = sub_neighbors[1].GetIdx()
             amines.append((n_idx, sub1_idx, sub2_idx))
+        elif len(ring_neighbors) == 2 and len(sub_neighbors) == 1: # case with 1 substituent
+            sub1_idx = sub_neighbors[0].GetIdx()
+            amines.append((n_idx, sub1_idx))
 
     return amines
 
@@ -64,7 +70,7 @@ def swap_substituents(mol, coords, n_idx, sub1_idx, sub2_idx, ring_atom_indices)
     coords: numpy array of shape (N_atoms, 3)
     n_idx: index of nitrogen atom
     sub1_idx: index of first substituent atom
-    sub2_idx: index of second substituent atom
+    sub2_idx: index of second substituent atom; may be None
     ring_atom_indices: list of indices of atoms forming the ring
 
     Returns a copy of the modified coords.
@@ -97,8 +103,10 @@ def swap_substituents(mol, coords, n_idx, sub1_idx, sub2_idx, ring_atom_indices)
 
     # Get full substituent trees
     group1 = get_substituent_tree(mol, sub1_idx, n_idx)
-    group2 = get_substituent_tree(mol, sub2_idx, n_idx)
-
+    if sub2_idx is not None:
+        group2 = get_substituent_tree(mol, sub2_idx, n_idx)
+    else:
+        group2 = []
 
     for sub_group in [group1, group2]:
         for atom_idx in sub_group:

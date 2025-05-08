@@ -269,9 +269,16 @@ def rotate_amine_substituents(mol: Mol,
 
     if len(amine_match) == 0:
         return coords_list
+    
+    print("jani debug, amine_match")
+    print(amine_match)
 
     for match in amine_match:
-        n_idx, sub1_idx, sub2_idx = match
+        if len(match) == 3:
+            n_idx, sub1_idx, sub2_idx = match
+        elif len(match) == 2:
+            n_idx, sub1_idx = match
+            sub2_idx = None
         ring_atoms = am.get_ring_atoms(mol, n_idx)
         tmp = []
         for coords in coords_list:
@@ -423,6 +430,7 @@ def expand_reasonable_chairs(
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
 
     # a little more debugging
+    debug=True
     if debug:
         print("Mol 1")
         print(am.molToXYZ(mol, coords))
