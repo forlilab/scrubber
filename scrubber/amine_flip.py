@@ -9,14 +9,11 @@ def find_n_ring_substituents(mol):
     with two substituents (non-ring atoms).
     Return (n_idx, sub1_idx, sub2_idx) if found, else None.
     """
-    smarts = '[NRX4,NRX3]'
+    smarts = '[NRX4H1,NRX3]'
     patt = Chem.MolFromSmarts(smarts)
 
     matches = mol.GetSubstructMatches(patt)
 
-    if not matches:
-        return None
-    
     amines = []
 
     for match in matches:
