@@ -2,12 +2,16 @@ import numpy as np
 import math
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
+from typing import List
 
 from rdkit.Chem import AllChem
 import random
 
 
 from .utils import optimize_conformers, add_conformers_to_mol, write_conformers_to_sdf
+from .utils import rotation_matrix
+from . import amine_flip as am
+
 
 def norm(v):
     return v / np.sqrt(np.dot(v, v))
@@ -243,7 +247,64 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
             new_coords = expand_ring6_rot5(coords, idxs, substituents)
             tmp.extend(new_coords)
         coords_list = tmp
+
     return coords_list
+
+
+def rotate_amine_substituents(mol: Mol, 
+                              coords_list: List, 
+                              max_ff_iter: int, 
+                              energy_threshold: float, 
+                              debug: bool):
+    
+    """
+    Identify amine group in ring structure and swap equatorial and axial
+    substituents. Determine optimal structure with energy minimization. 
+    """
+    
+    amine_match = am.find_n_ring_substituents(mol)
+
+    if len(amine_match) == 0:
+        return coords_list
+    
+    for match in amine_match:
+        if len(match) == 3:
+            n_idx, sub1_idx, sub2_idx = match
+        elif len(match) == 2:
+            n_idx, sub1_idx = match
+            sub2_idx = None
+        ring_atoms = am.get_ring_atoms(mol, n_idx)
+        tmp = []
+        for coords in coords_list:
+            
+            new_coords =  am.swap_substituents(mol, coords, n_idx, sub1_idx, sub2_idx, ring_atoms)
+
+            mol_with_confs = add_conformers_to_mol(mol, [coords, new_coords])
+            # compare new coords with old coords
+            optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
+        
+            old_energy = optimized_energies[0][1]
+            new_energy = optimized_energies[1][1]
+
+            if debug:
+                print(f"Initial energy: {old_energy}")
+                print(f"Initial coords:\n {am.molToXYZ(mol, coords)}")
+                print(f"Rotated energy: {new_energy}")
+                print(f"Rotated coords:\n {am.molToXYZ(mol, new_coords)}")
+
+            # determine optimal structure within energy threshold. 
+            if new_energy - old_energy < -energy_threshold:
+                tmp.append(new_coords)
+            elif new_energy - old_energy > energy_threshold:
+                tmp.append(coords)
+            else:
+                tmp.append(coords)
+                tmp.append(new_coords)
+
+        coords_list = tmp
+
+    return coords_list
+
 
 
 def expand_ring6_rot5(coords, idxs, substituents, axial_range=0.1, debug=False):
@@ -316,6 +377,11 @@ def expand_reasonable_chairs(
         axial_likeliness_range=0.1,
         max_ff_iter = 400):
     
+
+    # check for amine flip in initially supplied coords
+    c = rotate_amine_substituents(mol, [coords], max_ff_iter, energy_threshold, debug)
+    coords = c[0]
+
     if len(idxs) != 6:
         raise RuntimeError("length of idxs is %d but must be 6" % (len(idxs)))
     if calc_boat_likeliness(ringinfo) >= -2:
@@ -361,8 +427,19 @@ def expand_reasonable_chairs(
     newpos = rotate_corner(idxs[(best_index + 3) % 6], ringinfo, substituents, newpos, rotangle2)
     new_axial_likeliness = calc_axial_likeliness(substituents, newpos)
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
-    
-    if (use_energy): 
+
+    # now check for amine flip on new coordinates
+    c = rotate_amine_substituents(mol, [newpos], max_ff_iter, energy_threshold, debug)
+    newpos = c[0]
+
+    # a little more debugging
+    if debug:
+        print("Mol 1")
+        print(am.molToXYZ(mol, coords))
+        print("Mol 2")
+        print(am.molToXYZ(mol, newpos))
+
+    if (use_energy):
         ## calculate correct conformation by energy comparison ######
         ## MMFF94 forcefield
         
@@ -528,23 +605,5 @@ def rotate_ring_atom(index, coords, rotaxis, angle, substituents):
     for i in affected:
         coords[i] = np.dot(rotation_matrix(rotaxis, angle), coords[i])
     return coords
-
-def rotation_matrix(axis, theta):
-    """
-    Return the rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians.
-
-    source: https://stackoverflow.com/questions/6802577/rotation-of-3d-vector
-    """
-
-    axis = np.asarray(axis)
-    axis = axis / math.sqrt(np.dot(axis, axis))
-    a = math.cos(theta / 2.0)
-    b, c, d = -axis * math.sin(theta / 2.0)
-    aa, bb, cc, dd = a * a, b * b, c * c, d * d
-    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
-    return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                     [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                     [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
 
