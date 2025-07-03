@@ -16,16 +16,17 @@ def optimize_conformers(mol: Mol, use_mmff: bool=True, max_ff_iter: int = 400):
             ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
         else:
             ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
-        
+
         success = ff.Minimize(maxIts=max_ff_iter)
+        energy = 0.0
         # print(f"Success: {success}")
         # Check if minimization is successful. 
         if success == 0:
             energy = ff.CalcEnergy()
             optimized_energies.append((conf_id, energy))
         else:
-            ff.Minimize(maxIts=2*max_ff_iter)
-            energy == ff.CalcEnergy()
+            success = ff.Minimize(maxIts=2*max_ff_iter)
+            energy = ff.CalcEnergy()
             optimized_energies.append((conf_id, energy))
     
     return optimized_energies
