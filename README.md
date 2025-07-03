@@ -44,7 +44,7 @@ for mol_state in scrub(mol):
 
 ## Command line tool examples
 ```sh
-scrub.py "c1cc[nH]c(=O)c1" -o scrubbed.sdf --pH 5 --skip_gen3d
+scrub.py "c1cc[nH]c(=O)c1" -o scrubbed.sdf --ph 5 --skip_gen3d
 scrub.py input_mols.sdf -o scrubbed.sdf
 scrub.py input_mols.smi -o scrubbed.sdf
 ```
