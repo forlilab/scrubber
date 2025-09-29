@@ -230,7 +230,7 @@ geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff",
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
 geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
-geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
+geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
