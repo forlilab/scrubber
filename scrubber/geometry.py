@@ -159,10 +159,11 @@ def gen3d(
     espaloma=None,
     template=None,
     template_smarts=None,
-    use_energy=False,
+    ring_minimize=False,
     energy_threshold=0.5,
     debug=False
 ):
+
     mol.RemoveAllConformers()
     mol = Chem.AddHs(mol)
 
@@ -187,8 +188,8 @@ def gen3d(
 
     else:
         # if ring is minimized, take best of numconfs = 3
-        if use_energy:
-            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter)
+        if ring_minimize:
+            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
         else:
             cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
 
@@ -203,36 +204,48 @@ def gen3d(
         coords_list = etkdg_coords
     else:
         coords_list = []
-        [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug, max_ff_iter=max_ff_iter)) for c in etkdg_coords]
+        [coords_list.extend(fix_rings(mol, c, ring_minimize, energy_threshold, debug=debug, max_ff_iter=max_ff_iter, ff=ff)) for c in etkdg_coords]
    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
         for i, (x, y, z) in enumerate(coords):
             c.SetAtomPosition(i, Point3D(x, y, z))
         mol.AddConformer(c, assignId=True)
-
     if ff not in ["uff", "mmff94", "mmff94s", "espaloma"]:
         raise RuntimeError(
             f"ff is {ff} but must be 'uff', 'mmff94', 'mmff94s', or 'espaloma'"
         )
 
-    if ff == "espaloma":
-        if espaloma is None:
-            raise ValueError("espaloma minimizer needs to be passed")
-        mol, energies = espaloma.minim_espaloma(mol)
-    else:
-        optimize_func = {
-            "uff": rdForceFieldHelpers.UFFOptimizeMoleculeConfs,
-            "mmff94": rdForceFieldHelpers.MMFFOptimizeMoleculeConfs,
-            "mmff94s": lambda mol, maxIters: rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(
-                mol, maxIters=maxIters, mmffVariant="mmff94s"
-            ),
-        }[ff]
-        _energies = optimize_func(mol, maxIters=max_ff_iter)
-        energies = [e[1] for e in _energies]
+    # if ring_minimize is used, then don't do the optimization again
+    # instead just return what was given. 
 
-    
-    best_energy_index = min(zip(cids, energies), key=lambda x: x[1])[0]
-    final_mol = _ConfToMol(mol, best_energy_index)
+
+    if (debug):
+        from . import amine_flip as am
+        print("XYZ coordinates produced by ringfix")
+        for coords in coords_list:
+            print(am.molToXYZ(mol, coords))
+
+    if ring_minimize:
+        final_mol = mol
+    else:
+        if ff == "espaloma":
+            if espaloma is None:
+                raise ValueError("espaloma minimizer needs to be passed")
+            mol, energies = espaloma.minim_espaloma(mol)
+        else:
+            optimize_func = {
+                "uff": rdForceFieldHelpers.UFFOptimizeMoleculeConfs,
+                "mmff94": rdForceFieldHelpers.MMFFOptimizeMoleculeConfs,
+                "mmff94s": lambda mol, maxIters: rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(
+                    mol, maxIters=maxIters, mmffVariant="mmff94s"
+                ),
+            }[ff]
+            _energies = optimize_func(mol, maxIters=max_ff_iter)
+            energies = [e[1] for e in _energies]
+
+        
+        best_energy_index = min(zip(cids, energies), key=lambda x: x[1])[0]
+        final_mol = _ConfToMol(mol, best_energy_index)
 
     return final_mol

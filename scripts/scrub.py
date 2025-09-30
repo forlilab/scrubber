@@ -230,7 +230,7 @@ geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff",
 geom.add_argument("--template", help="Template molecule for 3D embedding with constraints")
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
 geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
-geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5)
+geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -338,8 +338,14 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
-# if ring_minimize is chosen, then numconfs is automatically 3
 
+# ring_minimize and espaloma incompatible for now. 
+if args.ring_minimize and args.ff == "espaloma":
+    # use colors
+    error_message = "\x1b[31mring_minimize and ff=espaloma are incompatible... for now.\033[0m"
+    raise ValueError(error_message)
+ 
+# if ring_minimize is chosen, then numconfs is automatically 3
 if args.ring_minimize and args.numconfs is None:
     nconfs = 3
 else:
@@ -366,7 +372,7 @@ scrub = Scrub(
     numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     ff=args.ff,
-    use_energy=args.ring_minimize,
+    ring_minimize=args.ring_minimize,
     energy_threshold=args.energy_threshold,
     debug=args.debug
 )

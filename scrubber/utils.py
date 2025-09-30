@@ -8,11 +8,12 @@ import math
 
 import numpy as np
 
-def optimize_conformers(mol: Mol, use_mmff: bool=True, max_ff_iter: int = 400):
+def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
     optimized_energies = []
     
     for conf_id in range(mol.GetNumConformers()):
-        if use_mmff and AllChem.MMFFHasAllMoleculeParams(mol):
+
+        if (ff=="mmff94" or ff=="mmff94s") and AllChem.MMFFHasAllMoleculeParams(mol):
             ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
         else:
             ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
@@ -44,9 +45,14 @@ def add_conformers_to_mol(mol: Mol, conf_coords_list):
 
     return mol
 
-def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400):
+def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400, ff="mmff94s"):
+    """
+    Generate multiple conformers with ETKDG and select the one 
+    with the lowest energy
+    """
+
     cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
-    energies = optimize_conformers(mol, False, max_ff_iter)
+    energies = optimize_conformers(mol, ff, max_ff_iter)
     if not energies:
         raise ValueError("No conformers could be optimized during initial generation.")
     

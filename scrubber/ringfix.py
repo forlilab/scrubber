@@ -195,7 +195,13 @@ def calc_axial_likeliness(substituents, coords):
     return axial_likeliness
 
 
-def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float, debug=False, max_ff_iter: int = 400):
+def fix_rings(mol: Mol, 
+              coords: list, 
+              use_energy: bool, 
+              energy_threshold: float, 
+              debug=False, 
+              max_ff_iter: int = 400,
+              ff:str = "mmff94"):
     #one_ring_atom_smarts = "[$([R1]),$([R2;x4]);!$([#6;R2;x3]);!$([#6;R1;X3](@=*));!$([#6](=*)(@N))]"
     #smarts = "{s}1{s}{s}{s}{s}{s}1".format(s=one_ring_atom_smarts)
 
@@ -237,7 +243,7 @@ def fix_rings(mol: Mol, coords: list, use_energy: bool, energy_threshold: float,
         substituents = get_substituents(mol, idxs)
         for coords in coords_list:
             ringinfo = RingInfo(coords, idxs, debug)
-            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, 0.1, max_ff_iter)
+            new_coords = expand_reasonable_chairs(coords, idxs, ringinfo, substituents, mol, use_energy, energy_threshold, debug, 0.1, max_ff_iter, ff)
             tmp.extend(new_coords)
         coords_list = tmp
     for idxs in ring6_rot5_idxs:
@@ -255,7 +261,8 @@ def rotate_amine_substituents(mol: Mol,
                               coords_list: List, 
                               max_ff_iter: int, 
                               energy_threshold: float, 
-                              debug: bool):
+                              debug: bool, 
+                              ff: str = "mmff94"):
     
     """
     Identify amine group in ring structure and swap equatorial and axial
@@ -281,7 +288,7 @@ def rotate_amine_substituents(mol: Mol,
 
             mol_with_confs = add_conformers_to_mol(mol, [coords, new_coords])
             # compare new coords with old coords
-            optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
+            optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
         
             old_energy = optimized_energies[0][1]
             new_energy = optimized_energies[1][1]
@@ -375,11 +382,12 @@ def expand_reasonable_chairs(
         energy_threshold: float, 
         debug: bool, 
         axial_likeliness_range=0.1,
-        max_ff_iter = 400):
+        max_ff_iter = 400, 
+        ff: str = "mmff94"):
     
 
     # check for amine flip in initially supplied coords
-    c = rotate_amine_substituents(mol, [coords], max_ff_iter, energy_threshold, debug)
+    c = rotate_amine_substituents(mol, [coords], max_ff_iter, energy_threshold, debug, ff)
     coords = c[0]
 
     if len(idxs) != 6:
@@ -429,7 +437,7 @@ def expand_reasonable_chairs(
     new_axial_likeliness += calc_anomeric_penalty(mol, substituents, newpos)
 
     # now check for amine flip on new coordinates
-    c = rotate_amine_substituents(mol, [newpos], max_ff_iter, energy_threshold, debug)
+    c = rotate_amine_substituents(mol, [newpos], max_ff_iter, energy_threshold, debug, ff)
     newpos = c[0]
 
     # a little more debugging
@@ -438,6 +446,7 @@ def expand_reasonable_chairs(
         print(am.molToXYZ(mol, coords))
         print("Mol 2")
         print(am.molToXYZ(mol, newpos))
+
 
     if (use_energy):
         ## calculate correct conformation by energy comparison ######
@@ -451,11 +460,10 @@ def expand_reasonable_chairs(
             oldmol = add_conformers_to_mol(mol, [coords])
             newmol = add_conformers_to_mol(mol, [newpos])
 
-        
-        optimized_energies = optimize_conformers(mol_with_confs, False, max_ff_iter)
-        
-        # optimized_energy_old = optimize_conformers(oldmol, False)
-        # optimized_energy_new = optimize_conformers(newmol, False)
+        optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
+
+        # optimized_energy_old = optimize_conformers(oldmol, ff)
+        # optimized_energy_new = optimize_conformers(newmol, ff)
 
         # Print the optimized energy values
         old_energy = optimized_energies[0][1]
@@ -472,7 +480,6 @@ def expand_reasonable_chairs(
             # for conf_id, energy in optimized_energies:
             #     print(f"Conformer {conf_id}: Energy = {energy:.4f} kcal/mol")
                 
-
         if new_energy - old_energy < -energy_threshold:
             return [newpos]
         elif new_energy - old_energy > energy_threshold:
