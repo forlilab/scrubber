@@ -338,8 +338,14 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
-# if ring_minimize is chosen, then numconfs is automatically 3
 
+# ring_minimize and espaloma incompatible for now. 
+if args.ring_minimize and args.ff == "espaloma":
+    # use colors
+    error_message = "\x1b[31mring_minimize and ff=espaloma are incompatible... for now.\033[0m"
+    raise ValueError(error_message)
+ 
+# if ring_minimize is chosen, then numconfs is automatically 3
 if args.ring_minimize and args.numconfs is None:
     nconfs = 3
 else:
