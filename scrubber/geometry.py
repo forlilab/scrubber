@@ -159,7 +159,7 @@ def gen3d(
     espaloma=None,
     template=None,
     template_smarts=None,
-    use_energy=False,
+    ring_minimize=False,
     energy_threshold=0.5,
     debug=False
 ):
@@ -188,7 +188,7 @@ def gen3d(
 
     else:
         # if ring is minimized, take best of numconfs = 3
-        if use_energy:
+        if ring_minimize:
             mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
         else:
             cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
@@ -204,7 +204,7 @@ def gen3d(
         coords_list = etkdg_coords
     else:
         coords_list = []
-        [coords_list.extend(fix_rings(mol, c, use_energy, energy_threshold, debug=debug, max_ff_iter=max_ff_iter, ff=ff)) for c in etkdg_coords]
+        [coords_list.extend(fix_rings(mol, c, ring_minimize, energy_threshold, debug=debug, max_ff_iter=max_ff_iter, ff=ff)) for c in etkdg_coords]
    
     for coords in coords_list:
         c = Chem.Conformer(mol.GetNumAtoms())
@@ -226,7 +226,7 @@ def gen3d(
         for coords in coords_list:
             print(am.molToXYZ(mol, coords))
 
-    if use_energy:
+    if ring_minimize:
         final_mol = mol
     else:
         if ff == "espaloma":

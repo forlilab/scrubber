@@ -37,7 +37,7 @@ class Scrub:
         numconfs=1,
         etkdg_rng_seed=None,
         ff="mmff94s",
-        use_energy=False,
+        ring_minimize=False,
         energy_threshold=0.5,
         debug=False
     ):
@@ -52,7 +52,7 @@ class Scrub:
         self.skip_ringfix = (
             skip_ringfix  # not avoiding negative to pass directly to gen3d
         )
-        self.use_energy = use_energy
+        self.ring_minimize = ring_minimize
         self.energy_threshold = energy_threshold
         self.do_gen3d = not skip_gen3d
         self.template = template
@@ -105,7 +105,7 @@ class Scrub:
                     espaloma=self.espaloma,
                     template=self.template,
                     template_smarts=self.template_smarts,
-                    use_energy = self.use_energy,
+                    ring_minimize = self.ring_minimize,
                     energy_threshold = self.energy_threshold,
                     debug=self.debug
                 )

@@ -366,7 +366,7 @@ scrub = Scrub(
     numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     ff=args.ff,
-    use_energy=args.ring_minimize,
+    ring_minimize=args.ring_minimize,
     energy_threshold=args.energy_threshold,
     debug=args.debug
 )
