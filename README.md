@@ -14,8 +14,8 @@ What happens:
 ```sh
 conda activate <desired-environment>    # if you are using conda environments
 
-git clone git@github.com:forlilab/scrubber.git
-cd scrubber
+git clone git@github.com:forlilab/molscrub.git
+cd molscrub
 pip install -e .
 ```
 
@@ -28,7 +28,7 @@ conda install rdkit -c conda-forge
 ## Python scripting
 ```python
 from rdkit import Chem
-from scrubber import Scrub
+from molscrub import Scrub
 
 scrub = Scrub(
     ph_low=7.4,

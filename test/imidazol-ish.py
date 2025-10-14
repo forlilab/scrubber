@@ -2,15 +2,15 @@
 
 import pathlib
 
-import scrubber
-from scrubber.transform import MoleculeIsomers
-from scrubber.transform import exhaustive_reaction
-from scrubber.transform import parse_reaction_file
-from scrubber.transform import enumerate_tautomers
+import molscrub
+from molscrub.transform import MoleculeIsomers
+from molscrub.transform import exhaustive_reaction
+from molscrub.transform import parse_reaction_file
+from molscrub.transform import enumerate_tautomers
 
 from rdkit import Chem
 
-p = pathlib.Path(scrubber.__file__).parents[0]/"data"/"tautomers.txt"
+p = pathlib.Path(molscrub.__file__).parents[0]/"data"/"tautomers.txt"
 
 mol = Chem.MolFromSmiles("Cc1nc[nH]c1")
 miso = MoleculeIsomers()
