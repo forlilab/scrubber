@@ -21,7 +21,7 @@ def find_files(directory):
 setup(
     name="molscrub",
     author="Forli Lab",
-    version="0.1.1",
+    version="0.2.0",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/molscrub",
     description="Enumerate states of small organic molecules: 3D coordinates, tautomers, pH-based adjustments",
