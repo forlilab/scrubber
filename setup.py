@@ -21,7 +21,7 @@ def find_files(directory):
 setup(
     name="molscrub",
     author="Forli Lab",
-    version="0.2.1",
+    version="0.2.2",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/molscrub",
     description="Enumerate states of small organic molecules: 3D coordinates, tautomers, pH-based adjustments",
@@ -36,6 +36,6 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=["rdkit>=2022.03.1"],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     license="GPL-v3",
 )
