@@ -232,7 +232,7 @@ def gen3d(
         if ff == "espaloma":
             if espaloma is None:
                 raise ValueError("espaloma minimizer needs to be passed")
-            mol, energies = espaloma.minim_espaloma(mol)
+            mol, energies = espaloma.minimize(mol)
         else:
             optimize_func = {
                 "uff": rdForceFieldHelpers.UFFOptimizeMoleculeConfs,
