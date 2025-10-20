@@ -39,7 +39,7 @@ def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
                 energy = ff.CalcEnergy()
                 optimized_energies.append((conf_id, energy))
     
-    return optimized_energies
+    return mol, optimized_energies
 
 def add_conformers_to_mol(mol: Mol, conf_coords_list):
     mol = Chem.Mol(mol)  # Make a copy to avoid modifying the original mol
@@ -61,7 +61,7 @@ def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400, ff="mmff94s"
     """
 
     cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
-    energies = optimize_conformers(mol, ff, max_ff_iter)
+    mol, energies = optimize_conformers(mol, ff, max_ff_iter)
     if not energies:
         raise ValueError("No conformers could be optimized during initial generation.")
     

@@ -288,7 +288,7 @@ def rotate_amine_substituents(mol: Mol,
 
             mol_with_confs = add_conformers_to_mol(mol, [coords, new_coords])
             # compare new coords with old coords
-            optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
+            mol_with_confs, optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
         
             old_energy = optimized_energies[0][1]
             new_energy = optimized_energies[1][1]
@@ -459,10 +459,7 @@ def expand_reasonable_chairs(
             oldmol = add_conformers_to_mol(mol, [coords])
             newmol = add_conformers_to_mol(mol, [newpos])
 
-        optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
-
-        # optimized_energy_old = optimize_conformers(oldmol, ff)
-        # optimized_energy_new = optimize_conformers(newmol, ff)
+        mol_with_confs, optimized_energies = optimize_conformers(mol_with_confs, ff, max_ff_iter)
 
         # Print the optimized energy values
         old_energy = optimized_energies[0][1]
