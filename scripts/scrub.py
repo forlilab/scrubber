@@ -386,36 +386,22 @@ counter = {
     "failed": 0,
 }
 
-def scrub_and_catch_errors(input_mol, sdwriter_failed_mols=None):
-    log = {}
-    if input_mol is None:
-        log["input_mol_none"] = True
-        isomer_list = []
-    else:
-        log["input_mol_none"] = False
-        try:
-            isomer_list = scrub(input_mol)
-        except Exception as e:
-            log["exception"] = e
-            isomer_list = []
-            if sdwriter_failed_mols is not None:
-                input_mol.SetProp("exception", str(e))
-                sdwriter_failed_mols.write(input_mol)
-                sdwriter_failed_mols.flush() # slow?
-    return (isomer_list, log)
 
-def scrub_and_debug(input_mol, _=None):
-    log = {"input_mol_none": input_mol is None}
-    isomer_list = scrub(input_mol)
-    return (isomer_list, log)
-
-def write_and_log(isomer_list, log, counter):
+def write_and_log(isomer_list, log, counter, writer, failed_mol_writer=None):
     counter["supplied"] += 1
     if log["input_mol_none"]:
         counter["rdkit_nope"] += 1
-    elif len(isomer_list):
+    elif "exception" in log:
+        counter["failed"] += 1
+        input_mol = isomer_list
+        if failed_mol_writer is not None:
+            input_mol.SetProp("molscrub_caught_exception", str(log["exception"]))
+            failed_mol_writer.write(input_mol)
+        else:
+            print(log["exception"], file=sys.stderr)
+    elif type(isomer_list) == list and len(isomer_list):
         try:
-            w.write_mols(isomer_list, add_suffix=True, add_serial_suffix=args.wcg)
+            writer.write_mols(isomer_list, add_suffix=True, add_serial_suffix=args.wcg)
             counter["ok_mols"] += 1
         except Exception as e:
             print(e, file=sys.stderr)
@@ -430,40 +416,31 @@ def write_and_log(isomer_list, log, counter):
         counter["failed"] += 1
         if "exception" in log:
             print(log["exception"], file=sys.stderr)
+        print("Programming logic error. This should not be reached. Please report on GitHub")
+        print("scrub_and_catch_errors returns (isomer_list_if_ok_else_input, log)")
+        print("and it is expected that log (type dict) has key 'exception' if not returning a list")
+        print("but that didn't happen.")
 
-if args.debug and args.write_failed_mols:
-    print("--write_failed_mols does not work with --debug, exiting", file=sys.stderr)
-    sys.exit(2)
-    scrub_fn = scrub_and_debug
-    sdwriter_failures = None
-elif args.debug:
-    scrub_fn = scrub_and_debug
-    sdwriter_failures = None
-elif args.write_failed_mols is not None:
-    if args.cpu != 1:
-        print("--write_failed_mols does not work with multiprocessing, needs --cpu 1, exiting", file=sys.stderr)
-        sys.exit(2)
-    scrub_fn = scrub_and_catch_errors
-    sdwriter_failures = Chem.SDWriter(args.write_failed_mols)
+
+if args.write_failed_mols is not None:
+     sdwriter_failures = Chem.SDWriter(args.write_failed_mols)
 else:
-    scrub_fn = scrub_and_catch_errors
-    sdwriter_failures = None
+     sdwriter_failures = None
 
 if __name__ == '__main__':
     with Writer(args.out_fname) as w:
         if args.cpu == 1 or force_single_process:
             for input_mol in supplier:
-                isomer_list, log = scrub_fn(input_mol, sdwriter_failures)
-                write_and_log(isomer_list, log, counter)
+                isomer_list, log = scrub.scrub_and_catch_errors(input_mol)
+                write_and_log(isomer_list, log, counter, w, sdwriter_failures)
         else:
             if args.cpu < 1:
                 nr_proc = multiprocessing.cpu_count()
             else:
                 nr_proc = args.cpu
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
-            for (isomer_list, log) in p.imap_unordered(scrub_fn, supplier):
-                write_and_log(isomer_list, log, counter)
-
+            for (isomer_list, log) in p.imap_unordered(scrub.scrub_and_catch_errors, supplier):
+                write_and_log(isomer_list, log, counter, w, sdwriter_failures)
 
     if sdwriter_failures is not None:
         sdwriter_failures.close()
