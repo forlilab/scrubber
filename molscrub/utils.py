@@ -22,8 +22,14 @@ def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
         for conf_id in range(mol.GetNumConformers()):
 
 
-            if (ff=="mmff94" or ff=="mmff94s") and AllChem.MMFFHasAllMoleculeParams(mol):
-                ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=conf_id)
+            if ff=="mmff94" and AllChem.MMFFHasAllMoleculeParams(mol):
+                ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
+                                                            AllChem.MMFFGetMoleculeProperties(mol,mmffVariant='MMFF94'), 
+                                                            confId=conf_id)
+            elif ff=="mmff94s" and AllChem.MMFFHasAllMoleculeParams(mol):
+                ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
+                                                            AllChem.MMFFGetMoleculeProperties(mol,mmffVariant='MMFF94s'), 
+                                                            confId=conf_id)
             else:
                 ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
         
