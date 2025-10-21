@@ -14,10 +14,13 @@ from molscrub import SMIMolSupplierWrapper
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
+from rich.console import Console
 
 Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
                                 Chem.PropertyPickleOptions.PrivateProps)
 RDLogger.DisableLog("rdApp.*")
+
+console = Console()
 
 try:
     import h5py
@@ -340,7 +343,9 @@ else:
     else:
         nconfs = args.numconfs
 
-
+if args.ff == "espaloma": 
+    console.print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n", 
+                  style="bold red")
 
 scrub = Scrub(
     ph_low,
