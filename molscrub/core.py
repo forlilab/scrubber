@@ -120,3 +120,16 @@ class Scrub:
 
         return output_mol_list
 
+    def scrub_and_catch_errors(self, input_mol):
+        log = {}
+        if input_mol is None:
+            log["input_mol_none"] = True
+            isomer_list_if_ok_else_input = []
+            return isomer_list_if_ok_else_input, log
+        log["input_mol_none"] = False
+        try:
+            isomer_list_if_ok_else_input = self(input_mol)
+        except Exception as e:
+            log["exception"] = e
+            isomer_list_if_ok_else_input = input_mol
+        return isomer_list_if_ok_else_input, log
