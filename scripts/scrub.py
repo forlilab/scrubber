@@ -418,6 +418,13 @@ if args.write_failed_mols is not None:
 else:
      sdwriter_failures = None
 
+def wrapper_scrub(input_mol):
+    '''
+    wrapper to the scrub function. This is needed for parallelism to work
+    '''
+    mols, log = scrub.scrub_and_catch_errors(input_mol)
+    return mols, log
+
 if __name__ == '__main__':
     with Writer(args.out_fname) as w:
         if args.cpu == 1:
@@ -429,9 +436,12 @@ if __name__ == '__main__':
                 nr_proc = multiprocessing.cpu_count()
             else:
                 nr_proc = args.cpu
+            
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
             for (isomer_list, log) in p.imap_unordered(scrub.scrub_and_catch_errors, supplier):
                 write_and_log(isomer_list, log, counter, w, sdwriter_failures)
+            p.close()
+            p.join()
 
     if sdwriter_failures is not None:
         sdwriter_failures.close()

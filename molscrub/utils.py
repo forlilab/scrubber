@@ -13,6 +13,8 @@ from .espaloma_minim import EspalomaMinimizer
 def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
     optimized_energies = []
     
+    mol = Chem.Mol(mol) # create copy
+
     if (ff == "espaloma"):
         ff = EspalomaMinimizer()
         mol, energies = ff.minimize(mol)
