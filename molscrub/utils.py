@@ -11,13 +11,29 @@ import numpy as np
 from .espaloma_minim import EspalomaMinimizer
 
 def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
+    '''
+    Optimize the confomers of an rdkit mol object. 
+
+    returns a newly created mol with optimized geometries. 
+    '''
     optimized_energies = []
     
     mol = Chem.Mol(mol) # create copy
 
     if (ff == "espaloma"):
-        ff = EspalomaMinimizer()
-        mol, energies = ff.minimize(mol)
+        # because espaloma can malfunction, an initial minimization with 
+        # mmff94 is done to produce a more "reasonable" input geometry for 
+        # espaloma. 
+        if AllChem.MMFFHasAllMoleculeParams(mol):
+            for conf_id in range(mol.GetConformers()):
+                fff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
+                                            AllChem.MMFFGetMoleculeProperties(mol,mmffVariant='MMFF94'), 
+                                            confId=conf_id)
+                fff.Minimize(maxIts=100)      
+
+        # now optimize with Espaloma
+        fff = EspalomaMinimizer()
+        mol, energies = fff.minimize(mol)
         optimized_energies = list(zip(range(len(energies)), energies))
 
     else:
@@ -25,26 +41,26 @@ def optimize_conformers(mol: Mol, ff: str="mmff94", max_ff_iter: int = 400):
 
 
             if ff=="mmff94" and AllChem.MMFFHasAllMoleculeParams(mol):
-                ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
+                fff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
                                                             AllChem.MMFFGetMoleculeProperties(mol,mmffVariant='MMFF94'), 
                                                             confId=conf_id)
             elif ff=="mmff94s" and AllChem.MMFFHasAllMoleculeParams(mol):
-                ff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
+                fff : ForceField = AllChem.MMFFGetMoleculeForceField(mol, 
                                                             AllChem.MMFFGetMoleculeProperties(mol,mmffVariant='MMFF94s'), 
                                                             confId=conf_id)
             else:
-                ff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
+                fff : ForceField = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
         
-            success = ff.Minimize(maxIts=max_ff_iter)
+            success = fff.Minimize(maxIts=max_ff_iter)
             energy = 0.0
             # print(f"Success: {success}")
             # Check if minimization is successful. 
             if success == 0:
-                energy = ff.CalcEnergy()
+                energy = fff.CalcEnergy()
                 optimized_energies.append((conf_id, energy))
             else:
-                success = ff.Minimize(maxIts=2*max_ff_iter)
-                energy = ff.CalcEnergy()
+                success = fff.Minimize(maxIts=2*max_ff_iter)
+                energy = fff.CalcEnergy()
                 optimized_energies.append((conf_id, energy))
     
     return mol, optimized_energies
