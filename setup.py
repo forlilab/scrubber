@@ -35,7 +35,7 @@ setup(
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
-    install_requires=["rdkit>=2022.03.1"],
+    install_requires=["rdkit>=2022.03.1", "rich", "numpy"],
     python_requires=">=3.9",
     license="GPL-v3",
 )

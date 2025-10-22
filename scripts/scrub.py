@@ -14,10 +14,13 @@ from molscrub import SMIMolSupplierWrapper
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
+from rich.console import Console
 
 Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
                                 Chem.PropertyPickleOptions.PrivateProps)
 RDLogger.DisableLog("rdApp.*")
+
+console = Console()
 
 try:
     import h5py
@@ -259,14 +262,6 @@ else:
     print("--ph_low and --ph_high work together, either use both or none.")
     sys.exit()
 
-force_single_process = False
-if args.ff == "espaloma":
-    if args.cpu > 1:  # default is zero
-        print("--ff espaloma can't be used with multiprocessing")
-        sys.exit(2)
-    if args.cpu == 0:
-        print("will use only one process because of espaloma")
-        force_single_process = True
 
 # input
 extension = pathlib.Path(args.input).suffix
@@ -338,12 +333,6 @@ else:
     print("output file extension must be .sdf/.hdf5")
     sys.exit()
 
-
-# ring_minimize and espaloma incompatible for now. 
-if args.ring_minimize and args.ff == "espaloma":
-    # use colors
-    error_message = "\x1b[31mring_minimize and ff=espaloma are incompatible... for now.\033[0m"
-    raise ValueError(error_message)
  
 # if ring_minimize is chosen, then numconfs is automatically 3
 if args.ring_minimize and args.numconfs is None:
@@ -354,7 +343,9 @@ else:
     else:
         nconfs = args.numconfs
 
-
+if args.ff == "espaloma": 
+    console.print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n", 
+                  style="bold red")
 
 scrub = Scrub(
     ph_low,
@@ -427,9 +418,16 @@ if args.write_failed_mols is not None:
 else:
      sdwriter_failures = None
 
+def wrapper_scrub(input_mol):
+    '''
+    wrapper to the scrub function. This is needed for parallelism to work
+    '''
+    mols, log = scrub.scrub_and_catch_errors(input_mol)
+    return mols, log
+
 if __name__ == '__main__':
     with Writer(args.out_fname) as w:
-        if args.cpu == 1 or force_single_process:
+        if args.cpu == 1:
             for input_mol in supplier:
                 isomer_list, log = scrub.scrub_and_catch_errors(input_mol)
                 write_and_log(isomer_list, log, counter, w, sdwriter_failures)
@@ -438,9 +436,12 @@ if __name__ == '__main__':
                 nr_proc = multiprocessing.cpu_count()
             else:
                 nr_proc = args.cpu
+            
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
-            for (isomer_list, log) in p.imap_unordered(scrub.scrub_and_catch_errors, supplier):
+            for (isomer_list, log) in p.imap_unordered(wrapper_scrub, supplier):
                 write_and_log(isomer_list, log, counter, w, sdwriter_failures)
+            p.close()
+            p.join()
 
     if sdwriter_failures is not None:
         sdwriter_failures.close()

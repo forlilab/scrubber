@@ -39,7 +39,7 @@ class EspalomaMinimizer:
         self.Unit = Unit
         self.offquantity_to_openmm = to_openmm
 
-    def minim_espaloma(self, mol):
+    def minimize(self, mol):
 
         molecule = self.CreateMolecule.from_rdkit(mol, allow_undefined_stereo=True)
 
