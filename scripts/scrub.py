@@ -438,7 +438,7 @@ if __name__ == '__main__':
                 nr_proc = args.cpu
             
             p = multiprocessing.Pool(nr_proc - 1) # leave 1 for main process
-            for (isomer_list, log) in p.imap_unordered(scrub.scrub_and_catch_errors, supplier):
+            for (isomer_list, log) in p.imap_unordered(wrapper_scrub, supplier):
                 write_and_log(isomer_list, log, counter, w, sdwriter_failures)
             p.close()
             p.join()
