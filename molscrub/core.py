@@ -39,7 +39,8 @@ class Scrub:
         ff="mmff94s",
         ring_minimize=False,
         energy_threshold=0.5,
-        debug=False
+        keep_all_frags=False,
+        debug=False,
     ):
         self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
         self.tautomerizer = Tautomerizer.from_default_data_files()
@@ -64,6 +65,7 @@ class Scrub:
             etkdg_rng_seed if etkdg_rng_seed else random.randint(0, 1000000)
         )
         self.ff = ff
+        self.keep_all_frags = keep_all_frags
         self.debug = debug
 
         if ff == "espaloma":
@@ -75,8 +77,12 @@ class Scrub:
 
         #check for fragments and keep the largest. 
         frags = Chem.GetMolFrags(input_mol, asMols=True)
-        if len(frags) > 1:
-            print(f"Moleccule contains {len(frags)} fragments")
+        if len(frags) > 1 and not self.keep_all_frags:
+            if input_mol.HasProp("_Name") and input_mol.GetProp("_Name"):
+                name = input_mol.GetProp("_Name") 
+                print(f"Molecule {name} contains {len(frags)} fragments")
+            else:
+                print(f"Unnamed molecule contains {len(frags)} fragments")
             print("Only the largest fragment will be processed")
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
