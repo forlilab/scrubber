@@ -212,6 +212,7 @@ basic.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjug
 basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
 basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
+basic.add_argument("--keep_all_frags", help="Keeps all mol fragments (default is to keep largest only)", action="store_true")
 
 misc = parser_essential.add_argument_group("miscellaneous")
 misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
@@ -365,6 +366,7 @@ scrub = Scrub(
     ff=args.ff,
     ring_minimize=args.ring_minimize,
     energy_threshold=args.energy_threshold,
+    keep_all_frags=args.keep_all_frags,
     debug=args.debug
 )
 
