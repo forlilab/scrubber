@@ -71,7 +71,15 @@ class Scrub:
         else:
             self.espaloma = None
 
-    def __call__(self, input_mol):
+    def __call__(self, input_mol: Chem.Mol):
+
+        #check for fragments and keep the largest. 
+        frags = Chem.GetMolFrags(input_mol, asMols=True)
+        if len(frags) > 1:
+            print(f"Moleccule contains {len(frags)} fragments")
+            print("Only the largest fragment will be processed")
+            input_mol = max(frags, key=lambda x: x.GetNumAtoms())
+
 
         mol = Chem.RemoveHs(input_mol)
         pool = [input_mol]
