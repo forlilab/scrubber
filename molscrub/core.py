@@ -16,6 +16,7 @@ from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
 from .espaloma_minim import EspalomaMinimizer
+from .espaloma_minim import EspalomaCharger
 from .geometry import gen3d
 
 class Scrub:
@@ -40,6 +41,7 @@ class Scrub:
         ring_minimize=False,
         energy_threshold=0.5,
         keep_all_frags=False,
+        charge_model=None,
         debug=False,
     ):
         self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
@@ -66,12 +68,20 @@ class Scrub:
         )
         self.ff = ff
         self.keep_all_frags = keep_all_frags
+        self.charge_model = charge_model
         self.debug = debug
 
         if ff == "espaloma":
             self.espaloma = EspalomaMinimizer()
         else:
             self.espaloma = None
+
+        if charge_model == "espaloma":
+            self.espaloma_charger = EspalomaCharger()
+        elif charge_model is None:
+            self.espaloma_charger = None
+        else:
+            raise ValueError(f"{charge_model=} not supported")
 
     def __call__(self, input_mol: Chem.Mol):
 
@@ -131,6 +141,10 @@ class Scrub:
                 output_mol_list.append(mol)
         else:
             output_mol_list = pool
+
+        if self.charge_model == "espaloma":
+            for mol in output_mol_list:
+                self.espaloma_charger.set_charges(mol)
 
         return output_mol_list
 
