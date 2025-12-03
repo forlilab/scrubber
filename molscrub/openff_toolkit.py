@@ -177,8 +177,8 @@ class EspalomaCharger:
         import espaloma
         try:
             from openff.toolkit import Molecule
-        except ImportError:
-            print("A recent version of OpenFF is required for Espaloma charges")
+        except ImportError as err:
+            raise ImportError("A recent version of OpenFF is required for Espaloma charges") from err
 
         print("imported espaloma and openff toolkit.")
         self.espaloma_model = espaloma.get_model(version)
@@ -222,8 +222,8 @@ class NaglCharger:
         print("importing the openff toolkit...")
         try:
             from openff.toolkit import Molecule
-        except ImportError:
-            print("A recent version of OpenFF is required for NAGL charges")
+        except ImportError as err:
+            raise ImportError("A recent version of OpenFF is required for NAGL charges") from err
         self.Molecule = Molecule
 
 
