@@ -201,7 +201,7 @@ def get_info_str(counter):
 
 parser_essential = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", add_help=False)
 
-parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.cxsmiles) or SMILES string")
+parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles) or SMILES string")
 
 basic = parser_essential.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
@@ -238,6 +238,7 @@ geom.add_argument("--energy_threshold", help="energy threshold for conformer dis
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
+misc2.add_argument("--charge_model", help="adds partial charges to output SDF", choices=["espaloma", "nagl"])
 
 if "--help_advanced" in sys.argv:
     parser_essential.print_help()
@@ -270,7 +271,7 @@ if extension == ".sdf":
     supplier = Chem.SDMolSupplier(args.input)
 elif extension == ".mol":
     supplier = [Chem.MolFromMolFile(args.input)]
-elif extension == ".smi":
+elif extension == ".smi" or extension == ".smiles":
     supplier = SMIMolSupplierWrapper(args.input)
 elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
@@ -279,7 +280,7 @@ else:
     if mol is None:
         print("Input parsed as SMILES string, but conversion to RDKit mol failed.")
         print("The SMILES might be incorrect.")
-        print("If you want to pass a filename, its extension must be .sdf/.mol/.smi.")
+        print("If you want to pass a filename, its extension must be .sdf/.mol/.smi/.smiles/.cxsmiles")
         sys.exit()
     supplier = [mol]
 
@@ -367,7 +368,8 @@ scrub = Scrub(
     ring_minimize=args.ring_minimize,
     energy_threshold=args.energy_threshold,
     keep_all_frags=args.keep_all_frags,
-    debug=args.debug
+    charge_model=args.charge_model,
+    debug=args.debug,
 )
 
 counter = {

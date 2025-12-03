@@ -15,7 +15,8 @@ from .geometry import find_best_conformer
 from .protonate import AcidBaseConjugator
 from .protonate import Tautomerizer
 from .common import UniqueMoleculeContainer
-from .espaloma_minim import EspalomaMinimizer
+from .openff_toolkit import EspalomaMinimizer
+from .openff_toolkit import EspalomaCharger, NaglCharger
 from .geometry import gen3d
 
 class Scrub:
@@ -40,6 +41,7 @@ class Scrub:
         ring_minimize=False,
         energy_threshold=0.5,
         keep_all_frags=False,
+        charge_model=None,
         debug=False,
     ):
         self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
@@ -66,12 +68,22 @@ class Scrub:
         )
         self.ff = ff
         self.keep_all_frags = keep_all_frags
+        self.charge_model = charge_model
         self.debug = debug
 
         if ff == "espaloma":
             self.espaloma = EspalomaMinimizer()
         else:
             self.espaloma = None
+
+        if charge_model == "espaloma":
+            self.charger = EspalomaCharger()
+        elif charge_model == "nagl":
+            self.charger = NaglCharger()
+        elif charge_model is None:
+            self.charger = None
+        else:
+            raise ValueError(f"{charge_model=} not supported")
 
     def __call__(self, input_mol: Chem.Mol):
 
@@ -132,7 +144,11 @@ class Scrub:
         else:
             output_mol_list = pool
 
-        return output_mol_list
+
+        if self.charge_model is not None:
+            new_mol_list = list(map(self.charger.mol_with_charges, output_mol_list))
+
+        return new_mol_list
 
     def scrub_and_catch_errors(self, input_mol):
         log = {}
