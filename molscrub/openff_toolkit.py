@@ -4,6 +4,7 @@
 import numpy as np
 import warnings
 warnings.simplefilter("ignore", category=UserWarning)
+from rdkit import Chem
 
 class EspalomaMinimizer:
     
@@ -96,7 +97,7 @@ def _snap_to_int(value, tolerance=0.12):
 
 def divide_int_gracefully(integer, weights):
     for weight in weights:
-        if type(weight) not in [int, float] or weight < 0:
+        if type(weight) not in [int, float, np.float32, np.float64] or weight < 0:
             raise ValueError("weights must be numeric and non-negative")
     if type(integer) is not int:
         raise ValueError("integer must be integer")
@@ -174,13 +175,21 @@ class EspalomaCharger:
     def __init__(self, version="latest"):
         print("importing espaloma and openff toolkit...")
         import espaloma
-        from openff.toolkit.topology import Molecule
+        try:
+            from openff.toolkit import Molecule
+        except ImportError:
+            print("A recent version of OpenFF is required for Espaloma charges")
+
         print("imported espaloma and openff toolkit.")
         self.espaloma_model = espaloma.get_model(version)
         self.Molecule = Molecule
         self.espaloma = espaloma
 
-    def get_espaloma_charges(self, rdkit_mol):
+    def get_espaloma_charges(self, rdkit_mol: Chem.Mol):
+        '''
+            compute espaloma charges from rdkit mol,
+            return espaloma charges in form of array
+        '''
         openff_mol = self.Molecule.from_rdkit(
             rdkit_mol,
             hydrogens_are_explicit=True,
@@ -191,10 +200,70 @@ class EspalomaCharger:
         charges = [float(q) for q in molgraph.nodes["n1"].data["q"]]
         return charges
 
-    def set_charges(self, rdkit_mol, decimals=3, prop="atom.dprop.PartialCharge"):
-        charges = self.get_espaloma_charges(rdkit_mol)
+    def mol_with_charges(self, 
+                    rdkit_mol: Chem.Mol , 
+                    decimals: int = 3, 
+                    prop: str ="atom.dprop.PartialCharge"):
+        '''
+            compute the Espaloma charges of the rdkit mol, return a new mol with charges
+            as properties. 
+        '''
+
+        mol = Chem.Mol(rdkit_mol) # new mol object
+        charges = self.get_espaloma_charges(mol)
         charges = rectify_charges(charges, decimals=decimals)
         fstr = "%%.%df" % decimals
         charges = " ".join([fstr % q for q in charges]) 
-        rdkit_mol.SetProp(prop, charges)
-        return
+        mol.SetProp(prop, charges)
+        return mol
+
+class NaglCharger:
+    def __init__(self, version="latest"):
+        print("importing the openff toolkit...")
+        try:
+            from openff.toolkit import Molecule
+        except ImportError:
+            print("A recent version of OpenFF is required for NAGL charges")
+        self.Molecule = Molecule
+
+
+
+    def get_nagl_charges(self, rdkit_mol: Chem.Mol):
+        '''
+            compute nagl charges from rdkit mol,
+            return nagl charges in form of array
+        '''
+        openff_mol = self.Molecule.from_rdkit(
+            rdkit_mol,
+            hydrogens_are_explicit=True,
+            allow_undefined_stereo=True,
+        )
+
+        try:
+            openff_mol.assign_partial_charges(
+                partial_charge_method="openff-gnn-am1bcc-1.0.0.pt"
+            )
+            charges = openff_mol.partial_charges.magnitude
+        except Exception as e:
+            print("NAGL charge computation failed with with exception:")
+            print(e)
+            print("Make sure you've installed the latest version of openff")
+        return charges
+
+    def mol_with_charges(self, 
+                         rdkit_mol: Chem.Mol, 
+                         decimals: int = 3, 
+                         prop: str = "atom.dprop.PartialCharge"):
+        '''
+            compute the NAGL charges of the rdkit mol, return a new mol with charges
+            as properties. 
+        '''
+        
+        #
+        mol = Chem.Mol(rdkit_mol)
+        charges = self.get_nagl_charges(rdkit_mol)
+        charges = rectify_charges(charges, decimals=decimals)
+        fstr = "%%.%df" % decimals
+        charges = " ".join([fstr % q for q in charges]) 
+        mol.SetProp(prop, charges)
+        return mol

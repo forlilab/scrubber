@@ -238,7 +238,7 @@ geom.add_argument("--energy_threshold", help="energy threshold for conformer dis
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
-misc2.add_argument("--charge_model", help="adds partial charges to output SDF", choices=["espaloma"])
+misc2.add_argument("--charge_model", help="adds partial charges to output SDF", choices=["espaloma", "nagl"])
 
 if "--help_advanced" in sys.argv:
     parser_essential.print_help()
