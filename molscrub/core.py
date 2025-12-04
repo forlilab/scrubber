@@ -146,9 +146,9 @@ class Scrub:
 
 
         if self.charge_model is not None:
-            new_mol_list = list(map(self.charger.mol_with_charges, output_mol_list))
+            output_mol_list = list(map(self.charger.mol_with_charges, output_mol_list))
 
-        return new_mol_list
+        return output_mol_list
 
     def scrub_and_catch_errors(self, input_mol):
         log = {}
