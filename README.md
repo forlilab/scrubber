@@ -11,6 +11,14 @@ What happens:
 
 
 # Installation
+Direct installation:
+```sh
+conda activate <desired-environment>    # if you are using conda environments
+
+pip install git+https://github.com/forlilab/molscrub.git
+
+```
+For developers:
 ```sh
 conda activate <desired-environment>    # if you are using conda environments
 
