@@ -154,6 +154,7 @@ def gen3d(
     skip_ringfix: bool = False,
     max_ff_iter: int = 400,
     etkdg_rng_seed: int = 42,
+    use_random_coords=False,
     numconfs: int = 1,
     ff: str = "mmff94s",
     espaloma=None,
@@ -170,6 +171,7 @@ def gen3d(
     # Set up the ETKDG parameters
     ps = rdDistGeom.ETKDGv3()
     ps.randomSeed = etkdg_rng_seed
+    ps.useRandomCoords = use_random_coords
     ps.trackFailures = True
     ps.enforceChirality = True
     ps.useSmallRingTorsions = True

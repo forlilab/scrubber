@@ -235,6 +235,7 @@ geom.add_argument("--template", help="Template molecule for 3D embedding with co
 geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of template and query molecules for 3D embedding")
 geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
+geom.add_argument("--use_random_coords", help="use random coordinates for more robust (but slightly slower) embedding", action="store_true")
 
 misc2 = parser_advanced.add_argument_group("more miscellaneous options")
 misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
@@ -364,6 +365,7 @@ scrub = Scrub(
     max_ff_iter=args.max_ff_iter,
     numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
+    use_random_coords=args.use_random_coords,
     ff=args.ff,
     ring_minimize=args.ring_minimize,
     energy_threshold=args.energy_threshold,

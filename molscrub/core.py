@@ -37,6 +37,7 @@ class Scrub:
         max_ff_iter=400,
         numconfs=1,
         etkdg_rng_seed=None,
+        use_random_coords=False,
         ff="mmff94s",
         ring_minimize=False,
         energy_threshold=0.5,
@@ -66,6 +67,7 @@ class Scrub:
         self.etkdg_rng_seed = (
             etkdg_rng_seed if etkdg_rng_seed else random.randint(0, 1000000)
         )
+        self.use_random_coords = use_random_coords
         self.ff = ff
         self.keep_all_frags = keep_all_frags
         self.charge_model = charge_model
@@ -126,6 +128,7 @@ class Scrub:
                     skip_ringfix=self.skip_ringfix,
                     max_ff_iter=self.max_ff_iter,
                     etkdg_rng_seed=self.etkdg_rng_seed,
+                    use_random_coords=self.use_random_coords,
                     numconfs=self.numconfs,
                     ff=self.ff,
                     espaloma=self.espaloma,
