@@ -35,6 +35,7 @@ class Scrub:
         template_smarts=None,
         do_gen2d=False,
         max_ff_iter=400,
+        skip_etkdg=False,
         numconfs=1,
         etkdg_rng_seed=None,
         use_random_coords=False,
@@ -57,6 +58,7 @@ class Scrub:
             skip_ringfix  # not avoiding negative to pass directly to gen3d
         )
         self.ring_minimize = ring_minimize
+        self.skip_etkdg = skip_etkdg
         self.energy_threshold = energy_threshold
         self.do_gen3d = not skip_gen3d
         self.template = template
@@ -100,7 +102,6 @@ class Scrub:
             print("Only the largest fragment will be processed")
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
-
         mol = Chem.RemoveHs(input_mol)
         pool = [input_mol]
 
@@ -127,6 +128,7 @@ class Scrub:
                     mol,
                     skip_ringfix=self.skip_ringfix,
                     max_ff_iter=self.max_ff_iter,
+                    skip_etkdg=self.skip_etkdg,
                     etkdg_rng_seed=self.etkdg_rng_seed,
                     use_random_coords=self.use_random_coords,
                     numconfs=self.numconfs,

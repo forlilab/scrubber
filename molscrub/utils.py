@@ -84,8 +84,7 @@ def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400, ff="mmff94s"
 
     best_mol.AddConformer(conf, assignId=True)
 
-    return best_mol, [0]
-
+    return best_mol, [conf.GetId() for conf in mol.GetConformers()]
 #debug
 def write_conformers_to_sdf(mol, filename="test.sdf"):
     writer = Chem.SDWriter(filename)
