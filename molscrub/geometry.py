@@ -169,8 +169,9 @@ def gen3d(
 
     if not skip_etkdg:
         mol.RemoveAllConformers()
-    
-    mol = Chem.AddHs(mol)
+        mol = Chem.AddHs(mol)
+    else:
+        mol = Chem.AddHs(mol, addCoords=True)
 
     # Set up the ETKDG parameters
     ps = rdDistGeom.ETKDGv3()
