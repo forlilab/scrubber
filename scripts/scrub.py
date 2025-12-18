@@ -227,7 +227,9 @@ acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", 
 acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
 
 geom = parser_advanced.add_argument_group("3D coordinates")
+
 geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=400)
+geom.add_argument("--skip_etkdg", help="skip ETKDG conformer generation: use 3D coordinates from input file", action="store_true")
 geom.add_argument("--numconfs", help="Number of conformers to generate", type=int)
 geom.add_argument("--etkdg_rng_seed", help="seed for random number generator used in ETKDG", type=int)
 geom.add_argument("--ff", help="uff, mmff94, mmff94s, espaloma", choices=["uff", "mmff94", "mmff94s","espaloma"], default="mmff94s")
@@ -363,6 +365,7 @@ scrub = Scrub(
     template_smarts=template_smarts,
     do_gen2d=do_gen2d,
     max_ff_iter=args.max_ff_iter,
+    skip_etkdg=args.skip_etkdg,
     numconfs = nconfs,
     etkdg_rng_seed=args.etkdg_rng_seed,
     use_random_coords=args.use_random_coords,

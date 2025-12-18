@@ -153,6 +153,7 @@ def gen3d(
     mol,
     skip_ringfix: bool = False,
     max_ff_iter: int = 400,
+    skip_etkdg: bool = False,
     etkdg_rng_seed: int = 42,
     use_random_coords=False,
     numconfs: int = 1,
@@ -165,8 +166,12 @@ def gen3d(
     debug=False
 ):
 
-    mol.RemoveAllConformers()
-    mol = Chem.AddHs(mol)
+
+    if not skip_etkdg:
+        mol.RemoveAllConformers()
+        mol = Chem.AddHs(mol)
+    else:
+        mol = Chem.AddHs(mol, addCoords=True)
 
     # Set up the ETKDG parameters
     ps = rdDistGeom.ETKDGv3()
@@ -189,11 +194,22 @@ def gen3d(
         )
 
     else:
-        # if ring is minimized, take best of numconfs = 3
-        if ring_minimize:
-            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
+        # check skip_etkdg first, 
+
+        if skip_etkdg:
+            if mol.GetNumConformers() > 0:
+                print("Skipping ETKDG conformer generation....")
+                cids = [conf.GetId() for conf in mol.GetConformers()]
+            else:
+                raise RuntimeError(
+                    f"\x1b[31mNo 3D coordinates supplied. This is incompatible with --skip_etkdg\x1b[0m"
+                )
         else:
-            cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
+            # if ring is minimized, take best of numconfs = 3
+            if ring_minimize:
+                mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
+            else:
+                cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
 
     if len(cids) == 0:
         translate_failures(ps.GetFailureCounts())
