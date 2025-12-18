@@ -121,8 +121,17 @@ class Scrub:
                     molset.add(mol_out)
             pool = list(molset)
 
+        
+
         if self.do_gen3d:
             output_mol_list = []
+
+            if len(pool) > 1:
+                # if tautomers are generated, then 3d generation must go
+                # throught ETKDG 
+                print("More than one tautomer present, setting skip_etdkg=False")
+                self.skip_etkdg = False
+
             for mol in pool:
                 mol_out = gen3d(
                     mol,
