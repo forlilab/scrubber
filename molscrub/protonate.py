@@ -105,7 +105,7 @@ class Tautomerizer:
             smarts_mol = Chem.MolFromSmarts(smarts["smarts"])
             for j, mol in enumerate(tautomers):
                 smarts_count[i][j] = len(mol.GetSubstructMatches(smarts_mol))
-    
+
         # select tautomers that have the max count of each SMARTS
         best_of_all_counts = False # fewer tautomers if set to True
         is_selected = [True] * len(tautomers)
