@@ -103,6 +103,7 @@ class Scrub:
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
         mol = Chem.RemoveHs(input_mol)
+        ref_mol = Chem.Mol(input_mol) # keep a copy of the original mol
         pool = [input_mol]
 
         if self.do_acidbase:
@@ -125,12 +126,12 @@ class Scrub:
 
         if self.do_gen3d:
             output_mol_list = []
-
-            if len(pool) > 1:
-                # if tautomers are generated, then 3d generation must go
-                # throught ETKDG 
-                print("More than one tautomer present, setting skip_etdkg=False")
-                self.skip_etkdg = False
+            
+            if self.skip_etkdg:
+                from .geometry import copy_mcs_coordinates
+                # constrained embedding from input mol
+                print("skip_etkdg choosen, using constrained embedding with reference coordinates.")
+                pool = copy_mcs_coordinates(ref_mol, pool)
 
             for mol in pool:
                 mol_out = gen3d(
