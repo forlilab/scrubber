@@ -271,9 +271,13 @@ else:
 # input
 extension = pathlib.Path(args.input).suffix
 if extension == ".sdf":
-    supplier = Chem.SDMolSupplier(args.input)
+    # as of rdkit 2025.09.3, removeHs=True in the MolFromMolBlock code path
+    # adds explicit Hs, while Chem.RemoveHs does not. The explicit Hs
+    # are incompatible with the tautomer reactions, so we keep Hs here
+    # and call Chem.RemoveHs in the core object to avoid explicit Hs.
+    supplier = Chem.SDMolSupplier(args.input, removeHs=False)
 elif extension == ".mol":
-    supplier = [Chem.MolFromMolFile(args.input)]
+    supplier = [Chem.MolFromMolFile(args.input, removeHs=False)]
 elif extension == ".smi" or extension == ".smiles":
     supplier = SMIMolSupplierWrapper(args.input)
 elif extension == ".cxsmiles":
@@ -290,9 +294,10 @@ else:
 if args.template is not None:
     extension_template = pathlib.Path(args.template).suffix
     if extension_template == ".sdf":
-        template_mol = Chem.SDMolSupplier(args.template, removeHs=True)[0]
+        template_mol = next(Chem.SDMolSupplier(args.template, removeHs=False))
+        template_mol = Chem.RemoveHs(template_mol)
     elif extension_template == ".mol":
-        template_mol = Chem.MolFromMolFile(args.template, removeHs=True)
+        template_mol = Chem.MolFromMolFile(args.template, removeHs=False)
     else:
         print("You must provide a template with 3D coordinates in .sdf or .mol format")
         sys.exit()

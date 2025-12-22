@@ -98,7 +98,7 @@ class Tautomerizer:
                         tmp.add(product)
             for mol in tmp:
                 tautomers.add(mol)
-    
+
         # count occurences of each SMARTS
         smarts_count = [[0]*len(tautomers) for _ in self.keepmax_smarts]
         for i, smarts in enumerate(self.keepmax_smarts):

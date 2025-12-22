@@ -102,7 +102,7 @@ class Scrub:
             print("Only the largest fragment will be processed")
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
-        mol = Chem.RemoveHs(input_mol)
+        input_mol = Chem.RemoveHs(input_mol)
         ref_mol = Chem.Mol(input_mol) # keep a copy of the original mol
         pool = [input_mol]
 
@@ -177,4 +177,6 @@ class Scrub:
         except Exception as e:
             log["exception"] = e
             isomer_list_if_ok_else_input = input_mol
+            if self.debug:
+                raise e
         return isomer_list_if_ok_else_input, log
