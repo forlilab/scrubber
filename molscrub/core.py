@@ -102,8 +102,8 @@ class Scrub:
             print("Only the largest fragment will be processed")
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
-        input_mol = Chem.RemoveHs(input_mol)
         ref_mol = Chem.Mol(input_mol) # keep a copy of the original mol
+        input_mol = Chem.RemoveHs(input_mol)
         pool = [input_mol]
 
         if self.do_acidbase:
