@@ -102,7 +102,8 @@ class Scrub:
             print("Only the largest fragment will be processed")
             input_mol = max(frags, key=lambda x: x.GetNumAtoms())
 
-        mol = Chem.RemoveHs(input_mol)
+        ref_mol = Chem.Mol(input_mol) # keep a copy of the original mol
+        input_mol = Chem.RemoveHs(input_mol)
         pool = [input_mol]
 
         if self.do_acidbase:
@@ -121,8 +122,17 @@ class Scrub:
                     molset.add(mol_out)
             pool = list(molset)
 
+        
+
         if self.do_gen3d:
             output_mol_list = []
+            
+            if self.skip_etkdg:
+                from .geometry import copy_mcs_coordinates
+                # constrained embedding from input mol
+                print("skip_etkdg choosen, using constrained embedding with reference coordinates.")
+                pool = copy_mcs_coordinates(ref_mol, pool)
+
             for mol in pool:
                 mol_out = gen3d(
                     mol,
@@ -167,4 +177,6 @@ class Scrub:
         except Exception as e:
             log["exception"] = e
             isomer_list_if_ok_else_input = input_mol
+            if self.debug:
+                raise e
         return isomer_list_if_ok_else_input, log

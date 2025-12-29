@@ -149,6 +149,67 @@ def translate_failures(failure_counts):
         return None
 
 
+def copy_mcs_coordinates(ref_mol: Chem.Mol, 
+                         target_mols: list[Chem.Mol]):
+    """
+    Copy the 3D coordinates from a reference mol object to 
+    a list of similar mol objects, then do a constrained embedding. 
+    """
+    #make copy
+    mol1 = Chem.Mol(ref_mol)
+
+    ## MCS match
+    from rdkit.Chem import rdFMCS
+
+    new_target_mols = []
+
+    for mol2 in target_mols:
+        mcs = rdFMCS.FindMCS(
+            [mol1, mol2],
+            completeRingsOnly=True,
+            ringMatchesRingOnly=True,
+            matchValences=True
+        )
+
+        if mcs.numAtoms < 1:
+            raise RuntimeError(
+                f"\x1b[31mNo MCS found. Constrained embedding is not possible.\nYou are lost, turn back and reconsider.\x1b[0m")
+
+
+        patt = Chem.MolFromSmarts(mcs.smartsString)
+
+        # create atom maps for constrained embedding
+        m1_match = mol1.GetSubstructMatch(patt)
+        m2_match = mol2.GetSubstructMatch(patt)
+        # atom_map = list(zip(m1_match, m2_match))
+
+        # put 3d coords of mol1 to mol2
+        from rdkit.Geometry import Point3D
+        # create a conformer for core
+        core = Chem.Mol(patt)  
+
+        conf_core = Chem.Conformer(core.GetNumAtoms())
+        conf1 = mol1.GetConformer()
+
+        for core_i, mol1_i in enumerate(m1_match):
+            p = conf1.GetAtomPosition(mol1_i)
+            conf_core.SetAtomPosition(core_i, Point3D(p.x, p.y, p.z))
+
+        core.RemoveAllConformers()
+        core.AddConformer(conf_core, assignId=True)
+
+        mol2_3d = Chem.AddHs(Chem.Mol(mol2))
+
+        _ = AllChem.ConstrainedEmbed(
+            mol2_3d,
+            core,              # core has coordinates
+            useTethers=True,
+            randomseed=0xF00D
+        )
+        new_target_mols.append(mol2_3d)
+    
+    return new_target_mols
+
 def gen3d(
     mol,
     skip_ringfix: bool = False,
