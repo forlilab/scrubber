@@ -225,6 +225,8 @@ parser_advanced = argparse.ArgumentParser() # for --help_advanced
 acidbase = parser_advanced.add_argument_group("acid base enumeration")
 acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", type=float)
 acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
+acidbase.add_argument("--pka_fname", help="file with SMARTS reactions for acid-base conjugation")
+acidbase.add_argument("--tauto_fname", help="file with SMARTS reactions and rules for tautomerism")
 
 geom = parser_advanced.add_argument_group("3D coordinates")
 
@@ -360,8 +362,8 @@ if args.ff == "espaloma":
 scrub = Scrub(
     ph_low,
     ph_high,
-    pka_fname=None,
-    tauto_fname=None,
+    pka_fname=args.pka_fname,
+    tauto_fname=args.tauto_fname,
     skip_acidbase=args.skip_acidbase,
     skip_tautomers=args.skip_tautomers,
     skip_ringfix=args.skip_ringfix,

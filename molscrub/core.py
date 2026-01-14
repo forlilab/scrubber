@@ -46,8 +46,16 @@ class Scrub:
         charge_model=None,
         debug=False,
     ):
-        self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
-        self.tautomerizer = Tautomerizer.from_default_data_files()
+        if pka_fname is None:
+            self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
+        else:
+            reactions = AcidBaseConjugator.parse_reaction_file(pka_fname)
+            self.acid_base_conjugator = AcidBaseConjugator(reactions)
+        if tauto_fname is None:
+            self.tautomerizer = Tautomerizer.from_default_data_files()
+        else:
+            rules = Tautomerizer.parse_tautomers_config_file(tauto_fname)
+            self.tautomerizer = Tautomerizer(rules)
         self.ph_low = ph_low
         if ph_high is None:
             ph_high = ph_low
