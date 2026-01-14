@@ -54,8 +54,8 @@ class Scrub:
         if tauto_fname is None:
             self.tautomerizer = Tautomerizer.from_default_data_files()
         else:
-            rules = Tautomerizer.parse_tautomers_config_file(tauto_fname)
-            self.tautomerizer = Tautomerizer(rules)
+            reactions, keepmax_smarts = Tautomerizer.parse_tautomers_config_file(tauto_fname)
+            self.tautomerizer = Tautomerizer(reactions, keepmax_smarts)
         self.ph_low = ph_low
         if ph_high is None:
             ph_high = ph_low
