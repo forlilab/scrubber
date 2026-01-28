@@ -1,4 +1,7 @@
-# Scrubber
+
+![molscrub_logo.png]
+
+# Molscrub
 Process large numbers of small molecules for docking with AutoDock.
 May be useful for structure-based modeling in general.
 
