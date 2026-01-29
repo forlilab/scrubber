@@ -266,11 +266,9 @@ def gen3d(
                     f"\x1b[31mNo 3D coordinates supplied. This is incompatible with --skip_etkdg\x1b[0m"
                 )
         else:
-            # if ring is minimized, take best of numconfs = 3
-            if ring_minimize:
-                mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
-            else:
-                cids = rdDistGeom.EmbedMultipleConfs(mol, numconfs, ps)
+            # always start with best of numconfs conformers
+            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
+
 
     if len(cids) == 0:
         translate_failures(ps.GetFailureCounts())
