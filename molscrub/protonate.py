@@ -38,11 +38,6 @@ class AcidBaseConjugator:
         pka_reactions = cls.parse_reaction_file(default_pka_reactions_fn)
         return cls(pka_reactions)
 
-    @classmethod
-    def from_reactions_filename(cls, fname):
-        pka_reactions = cls.parse_reaction_file(fname)
-        return cls(pka_reactions) 
-
     @staticmethod
     def parse_reaction_file(datafile: str) -> list:
         """the line format is the following:
