@@ -88,7 +88,8 @@ class Tautomerizer:
             for mol in tautomers:
                 for r in self.reactions:
                     uniq = UniqueMoleculeContainer()
-                    products = react_and_sanitize(mol, r["rxn"])
+                    rxn = r['rxn']
+                    products = react_and_sanitize(mol, rxn)
                     for product in products:
                         tmp.add(product)
             for mol in tmp:
@@ -131,15 +132,17 @@ class Tautomerizer:
                     keepmax_smarts.append({"smarts": smarts, "name": name, "fn": fn})
                 else:
                     smirks, name = line.split()
-                    reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name})
+                    reactions.append({"rxn": rdChemReactions.ReactionFromSmarts(smirks), "name": name, "smarts": smirks})
         return reactions, keepmax_smarts
             
 
 def react_and_sanitize(mol, rxn):
     nr_react = rxn.GetNumReactantTemplates()
     nr_prod = rxn.GetNumProductTemplates()
+    #regenerate 
+    mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol)) # fixes second round tautomerization bugs
     if nr_react != 1 or nr_prod != 1:
-        raise RuntimeError("reaction %s must be single reactant -> single product" % name)
+        raise RuntimeError("reaction must be single reactant -> single product")
     output_products = []
     products = rxn.RunReactants((mol,))
     for product in products:
@@ -178,7 +181,7 @@ def convert_exhaustive(mol, rxn):
     nr_react = rxn.GetNumReactantTemplates()
     nr_prod = rxn.GetNumProductTemplates()
     if nr_react != 1 or nr_prod != 1:
-        raise RuntimeError("reaction %s must be single reactant -> single product" % name)
+        raise RuntimeError("reaction must be single reactant -> single product" )
     # in case of multiple reactive substructures, maxProducts=1 returns a product with
     # only one reacted substructure. If maxProducts was not set to 1, we would get a tuple
     # of products, and each would have one (different) reacted substructure.
