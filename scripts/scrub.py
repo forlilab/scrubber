@@ -199,11 +199,11 @@ def get_info_str(counter):
             c["conformers"]/c["ok_mols"])
     return s
 
-parser_essential = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", add_help=False)
+parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", add_help=False)
 
-parser_essential.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles) or SMILES string")
+parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles) or SMILES string")
 
-basic = parser_essential.add_argument_group("options")
+basic = parser.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
 basic.add_argument("--write_failed_mols", help="filename for failed molecules (.sdf)")
 basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
@@ -214,21 +214,20 @@ basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", acti
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 basic.add_argument("--keep_all_frags", help="Keeps all mol fragments (default is to keep largest only)", action="store_true")
 
-misc = parser_essential.add_argument_group("miscellaneous")
+misc = parser.add_argument_group("miscellaneous")
 misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
 misc.add_argument("--debug", help="errors are raised", action="store_true")
 misc.add_argument("-h", "--help", help="show this help message and exit", action="help")
-misc.add_argument("--help_advanced", help="show advanced options and exit", action="store_true")
+misc.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
+misc.add_argument("--charge_model", help="adds partial charges to output SDF", choices=["espaloma", "nagl"])
 
-parser_advanced = argparse.ArgumentParser() # for --help_advanced
-
-acidbase = parser_advanced.add_argument_group("acid base enumeration")
+acidbase = parser.add_argument_group("acid base enumeration")
 acidbase.add_argument("--ph_low", help="low end of pH range (superseeds --ph)", type=float)
 acidbase.add_argument("--ph_high", help="high end of pH range (superseeds --ph)", type=float)
 acidbase.add_argument("--pka_fname", help="file with SMARTS reactions for acid-base conjugation")
 acidbase.add_argument("--tauto_fname", help="file with SMARTS reactions and rules for tautomerism")
 
-geom = parser_advanced.add_argument_group("3D coordinates")
+geom = parser.add_argument_group("3D coordinates")
 
 geom.add_argument("--max_ff_iter", help="maximum number of force field optimization steps", type=int, default=400)
 geom.add_argument("--skip_etkdg", help="skip ETKDG conformer generation: use 3D coordinates from input file", action="store_true")
@@ -241,23 +240,7 @@ geom.add_argument("--ring_minimize", help="use FF energy minimization to determi
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
 geom.add_argument("--use_random_coords", help="use random coordinates for more robust (but slightly slower) embedding", action="store_true")
 
-misc2 = parser_advanced.add_argument_group("more miscellaneous options")
-misc2.add_argument("--wcg", help="make sure mol names and suffixes are integers", action="store_true")
-misc2.add_argument("--charge_model", help="adds partial charges to output SDF", choices=["espaloma", "nagl"])
-
-if "--help_advanced" in sys.argv:
-    parser_essential.print_help()
-    f = io.StringIO()
-    parser_advanced.print_help(f)
-    f.seek(0)
-    advanced_help = f.read()
-    advanced_help = linesep + linesep.join(advanced_help.split(linesep)[5:-1])
-    print(advanced_help)
-    sys.exit()
-
-args_essential, remaining_args = parser_essential.parse_known_args()
-args_advanced = parser_advanced.parse_args(remaining_args)
-args = argparse.Namespace(**vars(args_essential), **vars(args_advanced))
+args = parser.parse_args()
 
 if args.ph_low is None and args.ph_high is None:
     ph_low = args.ph
