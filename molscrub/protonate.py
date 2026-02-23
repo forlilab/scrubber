@@ -119,7 +119,7 @@ class AcidBaseConjugator:
             or None if no unique site found
         """
 
-        # --- Step 1: Compute MCS ---
+        # Compute MCS
         mcs = rdFMCS.FindMCS(
             [original, reacted],
             bondCompare=rdFMCS.BondCompare.CompareOrder,
@@ -133,17 +133,17 @@ class AcidBaseConjugator:
 
         mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
 
-        # Get atom matches ---
+        # Get atom matches
         match_orig = original.GetSubstructMatch(mcs_mol)
         match_react = reacted.GetSubstructMatch(mcs_mol)
 
         if not match_orig or not match_react:
             return None
 
-        # Build mapping: reacted_idx → original_idx
+        # Build mapping: reacted_idx to original_idx
         react_to_orig = dict(zip(match_react, match_orig))
 
-        # Detect changed atom ---
+        # Detect changed atom
         changed_atoms = []
 
         for r_idx, o_idx in react_to_orig.items():
@@ -219,8 +219,8 @@ class AcidBaseConjugator:
         return reacted_mols
 
     def calculate_pka(self, mol, rxn_info, model="etr1"):
-        """
-        calculates pkas from the given model
+        """calculates pkas from the given model
+
         for now only one model is supported, but this may be updated in the future
         """
 
