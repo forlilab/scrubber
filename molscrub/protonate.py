@@ -4,18 +4,79 @@ from .common import UniqueMoleculeContainer
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
+from rdkit.Chem import rdFMCS
+import numpy as np
+import joblib
+import pandas as pd
+from rdkit.Chem import Descriptors
 
 datapath = files("molscrub") / "data"
 default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
 
+etr1_path = datapath  / "ETR_rules_rdkit_desc.joblib"
+
 class AcidBaseConjugator:
-    def __init__(self, pka_reactions):
+    def __init__(self, pka_reactions, pka_model="rules"):
         self.pka_reactions = pka_reactions
+        self.pka_model = pka_model
 
     def __call__(self, input_mol, ph_range_low, ph_range_high):
         if ph_range_low > ph_range_high:
             raise ValueError("ph_range_low must be lesser than or equal to ph_range_high")
+
+        # protonate according to selected model
+        if self.pka_model == "rules":
+            return self.protonate_with_rules(input_mol, ph_range_low, ph_range_high)
+        elif self.pka_model == "etr1":
+            return self.protonate_with_model(input_mol, ph_range_low, ph_range_high)
+        else:
+            raise ValueError("Unknown pKa model given. I don't know what to do.")
+
+
+    def protonate_with_model(self, input_mol, ph_range_low, ph_range_high):
+        """
+        return appropriate protonated mols with the ML model. 
+        Currently only one model is supported, but this may be expanded
+        in the future. 
+        """
+
+        rxn_info = self.get_rxn_info(input_mol)
+
+        if len(rxn_info) == 0:
+            # no rxn happened based on the rules
+            return [input_mol]
+        
+        mol_list = []
+
+        for rxn in rxn_info:
+            ml_pka = self.calculate_pka(input_mol, rxn, model="etr1")[0]
+
+            if ph_range_high < ml_pka:
+                if rxn["direction"] == "gain_h":
+                    mol_list.append(rxn["product"])
+                else: 
+                    mol_list.append(input_mol)
+
+            elif ph_range_low > ml_pka:
+                if rxn["direction"] == "lose_h":
+                    mol_list.append(rxn["product"])
+                else: 
+                    mol_list.append(input_mol)
+            else: 
+                # keep both
+                mol_list.append(input_mol)
+                mol_list.append(rxn["product"])
+
+        return mol_list
+
+
+    def protonate_with_rules(self,input_mol, ph_range_low, ph_range_high):
+        """
+        return appropriate protonated mols based on the smarts rxn given in the
+        default pka_reactions file or a custom file provided by the user. 
+        """
+
         mol_list = [input_mol]
         for r in self.pka_reactions:
             if ph_range_high < r["pka"]:
@@ -33,10 +94,196 @@ class AcidBaseConjugator:
             copy_mol_props(input_mol, mol)
         return mol_list
 
+    def mol_comparisons(self, mol1, mol2):
+        """
+        Check if 2 mols are the same, using inchi keys
+        """
+
+        inchi1 = Chem.MolToInchiKey(mol1)
+        inchi2 = Chem.MolToInchiKey(mol2)
+
+        return inchi1 == inchi2
+
+
+    def _one_hot(self, size, index):
+        return np.eye(size)[index]
+
+    def find_protonation_site_with_mcs(self, original: Chem.Mol, reacted: Chem.Mol):
+        """
+        Finds the atom index in `original` that changed protonation state
+        by computing maximal structural overlap (MCS) and building
+        an optimal atom mapping.
+        
+        Returns:
+            original atom index that changed
+            or None if no unique site found
+        """
+
+        # --- Step 1: Compute MCS ---
+        mcs = rdFMCS.FindMCS(
+            [original, reacted],
+            bondCompare=rdFMCS.BondCompare.CompareOrder,
+            atomCompare=rdFMCS.AtomCompare.CompareElements,
+            ringMatchesRingOnly=True,
+            completeRingsOnly=True,
+        )
+
+        if mcs.canceled or mcs.numAtoms == 0:
+            return None
+
+        mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
+
+        # Get atom matches ---
+        match_orig = original.GetSubstructMatch(mcs_mol)
+        match_react = reacted.GetSubstructMatch(mcs_mol)
+
+        if not match_orig or not match_react:
+            return None
+
+        # Build mapping: reacted_idx → original_idx
+        react_to_orig = dict(zip(match_react, match_orig))
+
+        # Detect changed atom ---
+        changed_atoms = []
+
+        for r_idx, o_idx in react_to_orig.items():
+
+            atom_orig = original.GetAtomWithIdx(o_idx)
+            atom_react = reacted.GetAtomWithIdx(r_idx)
+
+            if (
+                atom_orig.GetFormalCharge() != atom_react.GetFormalCharge()
+                or atom_orig.GetTotalNumHs() != atom_react.GetTotalNumHs()
+            ):
+                changed_atoms.append(o_idx)
+
+        if len(changed_atoms) == 1:
+            return changed_atoms[0]
+
+        # If multiple changed atoms, return None 
+        return None
+
+    def get_rxn_info(self, mol) -> list:
+        """
+        this function runs a mol object through all possible reactions and
+        returns information in the form of a dictionary on the reactions that succeed. 
+
+        dictionary keys:
+        ----------------
+        product: the product
+
+        rule_pka: the pka of the reaction as given by the pka_reactions.txt file
+
+        rxn_name: name of the reaction as given in the pka_reactions.txt file
+
+        rxn: the actual reaction in rdkit format
+
+        direction: whether the reaction that proceeds is the forward or backward reaction, as given in the file
+        
+        protonated_atom: the index of the atom that is protonated by the pka rxn. 
+        
+        rxn_1hot_encoding: array of 1-hot encodings indicating which reaction succeeded. 
+        """
+
+
+        size = len(self.pka_reactions)
+        reacted_mols = []
+
+
+        for i,r in enumerate(self.pka_reactions):
+            temp_forward = convert_exhaustive(mol, r["rxn_gain_h"])
+            temp_forward = Chem.MolFromSmiles(Chem.MolToSmiles(temp_forward))
+            if not self.mol_comparisons(mol, temp_forward):
+                changed_atom = self.find_protonation_site_with_mcs(mol, temp_forward)
+
+                reacted_mols.append({"product": temp_forward, 
+                                     "rule_pka": r["pka"], 
+                                     "rxn_name": r["name"], 
+                                     "rxn": r["rxn_gain_h"], 
+                                     "direction": "gain_h", 
+                                     "protonated_atom": changed_atom, 
+                                     "rxn_1hot_encoding": self._one_hot(size, i)})
+
+            temp_backward = convert_exhaustive(mol, r["rxn_lose_h"])
+            temp_backward = Chem.MolFromSmiles(Chem.MolToSmiles(temp_backward))
+            if not self.mol_comparisons(mol, temp_backward):
+                changed_atom = self.find_protonation_site_with_mcs(mol, temp_backward)
+                reacted_mols.append({"product":temp_backward, 
+                                     "rule_pka": r["pka"], 
+                                     "rxn_name":r["name"], 
+                                     "smarts_rxn": r["rxn_lose_h"], 
+                                     "direction": "lose_h", 
+                                     "protonated_atom": changed_atom, 
+                                     "rxn_1hot_encoding": self._one_hot(size, i)})
+        
+        return reacted_mols
+
+    def calculate_pka(self, mol, rxn_info, model="etr1"):
+        """
+        calculates pkas from the given model
+        for now only one model is supported, but this may be updated in the future
+        """
+
+        if model == "etr1":
+            model = joblib.load(etr1_path)
+            x = self._prepare_data_for_model(mol, rxn_info)
+        else:
+            raise ValueError("invalid model chosen for pka prediction.")
+
+        pka = model.predict(x)
+        return pka
+        
+
+    def _prepare_data_for_model(self, mol, rxn_info):
+        """
+        prepares data for input into the ml_model, using pandas
+        """
+
+        # rules
+        df = pd.DataFrame([rxn_info])
+        df = df[["rule_pka", "rxn_1hot_encoding"]]
+
+
+        # expand 1hot encoding
+        expanded_cols = df['rxn_1hot_encoding'].apply(pd.Series)
+        expanded_cols.columns = [f'encoding{i+1}' for i in range(expanded_cols.shape[1])] 
+
+        # rdkit descriptors
+        descriptors = self.getMolDescriptors(mol)
+        desc_df = pd.DataFrame([descriptors])
+
+        x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
+
+
+        # this is needed because that's how the model names it. 
+        x.rename({"rule_pka":"base_pka"}, axis=1, inplace=True)
+
+        return x
+
+
+    def getMolDescriptors(self, mol, missingVal=None):
+        ''' calculate the full list of descriptors for a molecule
+        
+            missingVal is used if the descriptor cannot be calculated
+        '''
+        res = {}
+        for nm,fn in Descriptors._descList:
+            # some of the descriptor fucntions can throw errors if they fail, catch those here:
+            try:
+                val = fn(mol)
+            except:
+                # print the error message:
+                import traceback
+                traceback.print_exc()
+                # and set the descriptor value to whatever missingVal is
+                val = missingVal
+            res[nm] = val
+        return res
+
     @classmethod 
-    def from_default_data_files(cls):
+    def from_default_data_files(cls, model="rules"):
         pka_reactions = cls.parse_reaction_file(default_pka_reactions_fn)
-        return cls(pka_reactions)
+        return cls(pka_reactions, pka_model = model)
 
     @staticmethod
     def parse_reaction_file(datafile: str) -> list:

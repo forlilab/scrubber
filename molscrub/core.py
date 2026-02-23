@@ -26,6 +26,7 @@ class Scrub:
         ph_low=7.4,
         ph_high=None,
         pka_fname=None,
+        pka_model="rules",
         tauto_fname=None,
         skip_acidbase=False,
         skip_tautomers=False,
@@ -47,7 +48,7 @@ class Scrub:
         debug=False,
     ):
         if pka_fname is None:
-            self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
+            self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files(model=pka_model)
         else:
             reactions = AcidBaseConjugator.parse_reaction_file(pka_fname)
             self.acid_base_conjugator = AcidBaseConjugator(reactions)
@@ -61,6 +62,7 @@ class Scrub:
             ph_high = ph_low
         self.ph_high = ph_high
         self.do_acidbase = not skip_acidbase
+        self.pka_model = pka_model
         self.do_tautomers = not skip_tautomers
         self.skip_ringfix = (
             skip_ringfix  # not avoiding negative to pass directly to gen3d

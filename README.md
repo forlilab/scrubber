@@ -58,6 +58,8 @@ for mol_state in scrub(mol):
 scrub.py "c1cc[nH]c(=O)c1" -o scrubbed.sdf --ph 5 --skip_gen3d
 scrub.py input_mols.sdf -o scrubbed.sdf
 scrub.py input_mols.smi -o scrubbed.sdf
+# different model for protonation
+scrub.py "c1cc[nH]c(=O)c1" --pka_model etr1 -o scrubbed.sdf
 ```
 
 Other options described in the help message:
