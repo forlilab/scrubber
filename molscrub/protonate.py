@@ -6,15 +6,18 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 from rdkit.Chem import rdFMCS
 import numpy as np
-import joblib
+import pickle
 import pandas as pd
 from rdkit.Chem import Descriptors
+from collections import deque
+import itertools
+
 
 datapath = files("molscrub") / "data"
 default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
 
-etr1_path = datapath  / "ETR_rules_rdkit_desc.joblib"
+etr1_path = datapath  / "ETR_latest_pickled.pkl"
 
 class AcidBaseConjugator:
     def __init__(self, pka_reactions, pka_model="rules"):
@@ -29,44 +32,65 @@ class AcidBaseConjugator:
         if self.pka_model == "rules":
             return self.protonate_with_rules(input_mol, ph_range_low, ph_range_high)
         elif self.pka_model == "etr1":
-            return self.protonate_with_model(input_mol, ph_range_low, ph_range_high)
+            with open(etr1_path, 'rb') as f:
+                model = pickle.load(f)
+            return self.protonate_with_model(input_mol, ph_range_low, ph_range_high, model)
         else:
             raise ValueError("Unknown pKa model given. I don't know what to do.")
 
 
-    def protonate_with_model(self, input_mol, ph_range_low, ph_range_high):
+    def protonate_with_model(self, input_mol, ph_range_low, ph_range_high, model):
         """
         return appropriate protonated mols with the ML model. 
         Currently only one model is supported, but this may be expanded
         in the future. 
         """
 
-        rxn_info = self.get_rxn_info(input_mol)
+        # just so we don't modify mol in place. 
+        modified_mol = Chem.Mol(input_mol)
 
-        if len(rxn_info) == 0:
+        all_mols = self.generate_all_protonation_states(modified_mol)
+        rxn_info = [self.get_rxn_info(m) for m in all_mols]
+
+        if len(all_mols) <= 1:
             # no rxn happened based on the rules
             return [input_mol]
+
+        tmp = UniqueMoleculeContainer()
+
+        for igr, unique_group in enumerate(rxn_info):
+
+            passed = 0 
+            p_groups = len(unique_group)
+            for rxn in unique_group:
+
+                # conditions for passing (considering the original mol): 
+                # if group is acidic and deprotonated (i.e. in the rxn will gain h)
+                # if group is basic and is protonated (i.e. in the rxn will lose h)
+
+                ml_pka = self.calculate_pka(rxn["original"], rxn, model=model)[0]
+                if ph_range_high < ml_pka:
+                    if rxn["direction"] == "lose_h":
+                        passed += 1
+
+
+                elif ph_range_low > ml_pka: 
+                    if rxn["direction"] == "gain_h":
+                        passed += 1
+                else: 
+                    # accept no matter what. 
+                    passed += 1
+
+
+            root_mol = all_mols[igr]
+
+            if passed == p_groups:
+                tmp.add(root_mol)
+
         
-        mol_list = []
-
-        for rxn in rxn_info:
-            ml_pka = self.calculate_pka(input_mol, rxn, model="etr1")[0]
-
-            if ph_range_high < ml_pka:
-                if rxn["direction"] == "gain_h":
-                    mol_list.append(rxn["product"])
-                else: 
-                    mol_list.append(input_mol)
-
-            elif ph_range_low > ml_pka:
-                if rxn["direction"] == "lose_h":
-                    mol_list.append(rxn["product"])
-                else: 
-                    mol_list.append(input_mol)
-            else: 
-                # keep both
-                mol_list.append(input_mol)
-                mol_list.append(rxn["product"])
+        mol_list = [mol for mol in tmp]
+        for mol in mol_list:
+            copy_mol_props(input_mol, mol)
 
         return mol_list
 
@@ -103,7 +127,6 @@ class AcidBaseConjugator:
         inchi2 = Chem.MolToInchiKey(mol2)
 
         return inchi1 == inchi2
-
 
     def _one_hot(self, size, index):
         return np.eye(size)[index]
@@ -170,13 +193,17 @@ class AcidBaseConjugator:
 
         dictionary keys:
         ----------------
+        original: the original mol
+
         product: the product
 
         rule_pka: the pka of the reaction as given by the pka_reactions.txt file
 
         rxn_name: name of the reaction as given in the pka_reactions.txt file
 
-        rxn: the actual reaction in rdkit format
+        rxn_gain_h: rxn to gain an h in rdkit format
+
+        rxn_lose_h: rxn to lose an h in rdkit format
 
         direction: whether the reaction that proceeds is the forward or backward reaction, as given in the file
         
@@ -188,48 +215,57 @@ class AcidBaseConjugator:
 
         size = len(self.pka_reactions)
         reacted_mols = []
+        seen_smiles = set()
 
 
         for i,r in enumerate(self.pka_reactions):
-            temp_forward = convert_exhaustive(mol, r["rxn_gain_h"])
-            temp_forward = Chem.MolFromSmiles(Chem.MolToSmiles(temp_forward))
-            if not self.mol_comparisons(mol, temp_forward):
-                changed_atom = self.find_protonation_site_with_mcs(mol, temp_forward)
+            temp_forward = convert_all_single_sites(mol, r["rxn_gain_h"])
+            
+            for m in temp_forward:
+                smi = Chem.MolToSmiles(m, canonical=True) 
 
-                reacted_mols.append({"product": temp_forward, 
-                                     "rule_pka": r["pka"], 
-                                     "rxn_name": r["name"], 
-                                     "rxn": r["rxn_gain_h"], 
-                                     "direction": "gain_h", 
-                                     "protonated_atom": changed_atom, 
-                                     "rxn_1hot_encoding": self._one_hot(size, i)})
+                if smi not in seen_smiles:
+                    seen_smiles.add(smi)
+                    changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
-            temp_backward = convert_exhaustive(mol, r["rxn_lose_h"])
-            temp_backward = Chem.MolFromSmiles(Chem.MolToSmiles(temp_backward))
-            if not self.mol_comparisons(mol, temp_backward):
-                changed_atom = self.find_protonation_site_with_mcs(mol, temp_backward)
-                reacted_mols.append({"product":temp_backward, 
-                                     "rule_pka": r["pka"], 
-                                     "rxn_name":r["name"], 
-                                     "smarts_rxn": r["rxn_lose_h"], 
-                                     "direction": "lose_h", 
-                                     "protonated_atom": changed_atom, 
-                                     "rxn_1hot_encoding": self._one_hot(size, i)})
+                    reacted_mols.append({"original": mol,
+                                        "product": m, 
+                                        "rule_pka": r["pka"], 
+                                        "rxn_name": r["name"], 
+                                        "rxn_gain_h": r["rxn_gain_h"], 
+                                        "rxn_lose_h": r["rxn_lose_h"],
+                                        "direction": "gain_h", 
+                                        "protonated_atom": changed_atom, 
+                                        "rxn_1hot_encoding": self._one_hot(size, i)})
+
+            temp_backward = convert_all_single_sites(mol, r["rxn_lose_h"])
+
+            for m in temp_backward:
+                smi = Chem.MolToSmiles(m, canonical=True) 
+
+                if smi not in seen_smiles:
+                    seen_smiles.add(smi)
+                    changed_atom = self.find_protonation_site_with_mcs(mol, m)
+
+                    reacted_mols.append({"original": mol,
+                                        "product":m, 
+                                        "rule_pka": r["pka"], 
+                                        "rxn_name":r["name"], 
+                                        "rxn_gain_h": r["rxn_gain_h"],
+                                        "rxn_lose_h": r["rxn_lose_h"], 
+                                        "direction": "lose_h", 
+                                        "protonated_atom": changed_atom, 
+                                        "rxn_1hot_encoding": self._one_hot(size, i)})
         
         return reacted_mols
 
-    def calculate_pka(self, mol, rxn_info, model="etr1"):
+    def calculate_pka(self, mol, rxn_info, model):
         """calculates pkas from the given model
 
         for now only one model is supported, but this may be updated in the future
         """
-
-        if model == "etr1":
-            model = joblib.load(etr1_path)
-            x = self._prepare_data_for_model(mol, rxn_info)
-        else:
-            raise ValueError("invalid model chosen for pka prediction.")
-
+        
+        x = self._prepare_data_for_model(mol, rxn_info)
         pka = model.predict(x)
         return pka
         
@@ -254,12 +290,45 @@ class AcidBaseConjugator:
 
         x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
 
+        x["charge_diff"] = self._charge_diff(mol, rxn_info["protonated_atom"])
 
         # this is needed because that's how the model names it. 
         x.rename({"rule_pka":"base_pka"}, axis=1, inplace=True)
 
         return x
 
+
+
+    def _charge_diff(self, mol, atom_idx):
+        """
+        Returns:
+            total_formal_charge(mol) - atom_charge(atom_idx)
+
+        """
+
+        if atom_idx < 0 or atom_idx >= mol.GetNumAtoms():
+            raise IndexError("atom_idx out of range")
+
+
+        # Total formal charge of molecule
+        total_formal = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
+
+        # Partial charge of specified atom
+        atom = mol.GetAtomWithIdx(atom_idx)
+
+        atom_charge = atom.GetFormalCharge()
+
+        return total_formal - atom_charge
+    
+    def atom_charge(self, mol, atom_idx):
+        if atom_idx < 0 or atom_idx >= mol.GetNumAtoms():
+            raise IndexError("atom_idx out of range")
+        
+        atom = mol.GetAtomWithIdx(atom_idx)
+
+        atom_charge = atom.GetFormalCharge()
+
+        return atom_charge
 
     def getMolDescriptors(self, mol, missingVal=None):
         ''' calculate the full list of descriptors for a molecule
@@ -279,6 +348,41 @@ class AcidBaseConjugator:
                 val = missingVal
             res[nm] = val
         return res
+    
+    def generate_all_protonation_states(self, mol):
+        """
+        Generate all possible protonation/deprotonation combinations.
+
+        Returns a list of unique molecules representing all states.
+        """
+
+        # use deque 
+        queue = deque([mol])
+
+        # track visited
+        seen = set()
+        seen.add(Chem.MolToSmiles(mol, canonical=True))
+
+        all_states = [mol]
+
+        while queue:
+            current = queue.popleft()
+
+            for r in self.pka_reactions:
+
+                ## TODO do rxn_gain_h and rxn_lose_h separately so it can be recorded. 
+                for rxn in (r["rxn_gain_h"], r["rxn_lose_h"]):
+                    products = convert_all_single_sites(current, rxn)
+
+                    # check what's already generated. 
+                    for p in products:
+                        smi = Chem.MolToSmiles(p, canonical=True)
+                        if smi not in seen:
+                            seen.add(smi)
+                            queue.append(p)
+                            all_states.append(p)
+
+        return all_states
 
     @classmethod 
     def from_default_data_files(cls, model="rules"):
@@ -416,6 +520,47 @@ def convert_recursive(mol, rxn, container):
     for product in react_and_sanitize(mol, rxn):
         container.add(product)
         convert_recursive(product, rxn, container)
+
+
+
+def convert_all_single_sites(mol, rxn):
+    """
+    Returns a list of molecules where the reaction has been applied
+    independently to each matching site.
+
+    - Each product has exactly one reacted substructure.
+    - Invalid/sanitization-failing products are skipped.
+    - If no reaction occurs, returns an empty list.
+    """
+
+    nr_react = rxn.GetNumReactantTemplates()
+    nr_prod = rxn.GetNumProductTemplates()
+
+    if nr_react != 1 or nr_prod != 1:
+        raise RuntimeError("reaction must be single reactant -> single product")
+
+    products_list = rxn.RunReactants((mol,))
+
+    valid_products = []
+    seen_smiles = set()
+
+
+    for products in products_list:
+        product = products[0] 
+
+        try:
+            Chem.SanitizeMol(product)
+        except (Chem.AtomValenceException, Chem.KekulizeException):
+            continue
+
+        # Remove duplicates (can happen due to symmetry)
+        smi = Chem.MolToSmiles(product, canonical=True)
+        if smi not in seen_smiles:
+            seen_smiles.add(smi)
+            valid_products.append(product)
+
+    return valid_products
+
 
 
 def convert_exhaustive(mol, rxn):
