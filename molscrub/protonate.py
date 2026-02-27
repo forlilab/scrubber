@@ -266,6 +266,10 @@ class AcidBaseConjugator:
         """
         
         x = self._prepare_data_for_model(mol, rxn_info)
+
+        # filter model features if newer rdkit version includes more. 
+        x = x[model.feature_names_in_]
+
         pka = model.predict(x)
         return pka
         
