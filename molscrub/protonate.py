@@ -59,7 +59,7 @@ class AcidBaseConjugator:
         tmp = UniqueMoleculeContainer()
 
         for igr, unique_group in enumerate(rxn_info):
-
+            props = []
             passed = 0 
             p_groups = len(unique_group)
             for rxn in unique_group:
@@ -72,17 +72,22 @@ class AcidBaseConjugator:
                 if ph_range_high < ml_pka:
                     if rxn["direction"] == "lose_h":
                         passed += 1
-
+                        props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
 
                 elif ph_range_low > ml_pka: 
                     if rxn["direction"] == "gain_h":
                         passed += 1
+                        props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
                 else: 
                     # accept no matter what. 
                     passed += 1
+                    props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
 
 
             root_mol = all_mols[igr]
+
+            for i, p in enumerate(props):
+                root_mol.SetProp(f"pka_props_{i}", str(p))
 
             if passed == p_groups:
                 tmp.add(root_mol)
@@ -116,6 +121,10 @@ class AcidBaseConjugator:
                 mol_list = [mol for mol in tmp]
         for mol in mol_list:
             copy_mol_props(input_mol, mol)
+            props = self.get_rxn_info(mol)
+            for i, p in enumerate(props):
+                prop = {"name": p["rxn_name"], "atom": p["protonated_atom"], "pKa": p["rule_pka"]}
+                mol.SetProp(f"pka_props_{i}", str(prop))
         return mol_list
 
     def mol_comparisons(self, mol1, mol2):
