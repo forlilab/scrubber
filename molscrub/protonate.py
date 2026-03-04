@@ -6,11 +6,17 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdChemReactions
 from rdkit.Chem import rdFMCS
 import numpy as np
-import pickle
+import joblib
 import pandas as pd
 from rdkit.Chem import Descriptors
 from collections import deque
 import itertools
+
+
+import urllib.request
+from pathlib import Path
+import tempfile
+import shutil
 
 
 datapath = files("molscrub") / "data"
@@ -18,6 +24,47 @@ default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
 
 etr1_path = datapath  / "ETR_latest_pickled.pkl"
+
+
+MODEL_URL = "https://github.com/forlilab/pkaPrediction/raw/refs/heads/main/models/ETR_latest_compressed.joblib"
+MODEL_FILENAME = "ETR_latest_compressed.joblib"
+
+CACHE_DIR = Path.home() / ".cache" / "molscrub"
+MODEL_PATH = CACHE_DIR / MODEL_FILENAME
+
+
+def download_model():
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print()
+    print("Downloading pickled ML model (one time only) from:")
+    print(MODEL_URL)
+    print("This will be saved in $HOME/.cache/molscrub/")
+    print()
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        urllib.request.urlretrieve(MODEL_URL, tmp_file.name)
+        tmp_path = Path(tmp_file.name)
+
+    shutil.move(str(tmp_path), MODEL_PATH)
+
+
+def verify_model():
+    if not MODEL_PATH.exists():
+        download_model()
+    else:
+        print()
+        print("pKa ML model found: ", MODEL_PATH)
+        print("download skipped")
+        print()
+
+
+def load_model():
+
+    verify_model()
+    model = joblib.load(MODEL_PATH)
+
+    return model
 
 class AcidBaseConjugator:
     def __init__(self, pka_reactions, pka_model="rules"):
@@ -32,8 +79,7 @@ class AcidBaseConjugator:
         if self.pka_model == "rules":
             return self.protonate_with_rules(input_mol, ph_range_low, ph_range_high)
         elif self.pka_model == "etr1":
-            with open(etr1_path, 'rb') as f:
-                model = pickle.load(f)
+            model = load_model()
             return self.protonate_with_model(input_mol, ph_range_low, ph_range_high, model)
         else:
             raise ValueError("Unknown pKa model given. I don't know what to do.")
