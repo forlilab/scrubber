@@ -98,6 +98,12 @@ class AcidBaseConjugator:
         all_mols = self.generate_all_protonation_states(modified_mol)
         rxn_info = [self.get_rxn_info(m) for m in all_mols]
 
+
+        # debug
+        # for gr in rxn_info:
+        #     for r in gr:
+        #         print(r["rxn_name"], r["protonated_atom"])
+
         if len(all_mols) <= 1:
             # no rxn happened based on the rules
             return [input_mol]
@@ -274,7 +280,7 @@ class AcidBaseConjugator:
 
 
         for i,r in enumerate(self.pka_reactions):
-            temp_forward = convert_all_single_sites(mol, r["rxn_gain_h"])
+            temp_forward = self.convert_all_single_sites(mol, r["rxn_gain_h"])
             
             for m in temp_forward:
                 smi = Chem.MolToSmiles(m, canonical=True) 
@@ -293,7 +299,7 @@ class AcidBaseConjugator:
                                         "protonated_atom": changed_atom, 
                                         "rxn_1hot_encoding": self._one_hot(size, i)})
 
-            temp_backward = convert_all_single_sites(mol, r["rxn_lose_h"])
+            temp_backward = self.convert_all_single_sites(mol, r["rxn_lose_h"])
 
             for m in temp_backward:
                 smi = Chem.MolToSmiles(m, canonical=True) 
@@ -348,6 +354,7 @@ class AcidBaseConjugator:
         desc_df = pd.DataFrame([descriptors])
 
         x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
+
 
         x["charge_diff"] = self._charge_diff(mol, rxn_info["protonated_atom"])
 
@@ -431,7 +438,7 @@ class AcidBaseConjugator:
 
                 ## TODO do rxn_gain_h and rxn_lose_h separately so it can be recorded. 
                 for rxn in (r["rxn_gain_h"], r["rxn_lose_h"]):
-                    products = convert_all_single_sites(current, rxn)
+                    products = self.convert_all_single_sites(current, rxn)
 
                     # check what's already generated. 
                     for p in products:
@@ -442,6 +449,48 @@ class AcidBaseConjugator:
                             all_states.append(p)
 
         return all_states
+    
+    def convert_all_single_sites(self, mol, rxn):
+        """
+        Returns a list of molecules where the reaction has been applied
+        independently to each matching site.
+
+        - Each product has exactly one reacted substructure.
+        - Invalid/sanitization-failing products are skipped.
+        - If no reaction occurs, returns an empty list.
+        """
+
+        nr_react = rxn.GetNumReactantTemplates()
+        nr_prod = rxn.GetNumProductTemplates()
+
+        if nr_react != 1 or nr_prod != 1:
+            raise RuntimeError("reaction must be single reactant -> single product")
+
+        products_list = rxn.RunReactants((mol,))
+
+        valid_products = []
+        seen_smiles = set()
+
+
+        for products in products_list:
+            product = products[0] 
+
+            try:
+                Chem.SanitizeMol(product)
+            except (Chem.AtomValenceException, Chem.KekulizeException):
+                continue
+
+            # Check that only 1 site has changed!
+            changed_atoms = self.find_protonation_site_with_mcs(mol, product)
+
+            if changed_atoms != None:
+                # Remove duplicates (can happen due to symmetry)
+                smi = Chem.MolToSmiles(product, canonical=True)
+                if smi not in seen_smiles:
+                    seen_smiles.add(smi)
+                    valid_products.append(product)
+
+        return valid_products
 
     @classmethod 
     def from_default_data_files(cls, model="rules"):
@@ -579,46 +628,6 @@ def convert_recursive(mol, rxn, container):
     for product in react_and_sanitize(mol, rxn):
         container.add(product)
         convert_recursive(product, rxn, container)
-
-
-
-def convert_all_single_sites(mol, rxn):
-    """
-    Returns a list of molecules where the reaction has been applied
-    independently to each matching site.
-
-    - Each product has exactly one reacted substructure.
-    - Invalid/sanitization-failing products are skipped.
-    - If no reaction occurs, returns an empty list.
-    """
-
-    nr_react = rxn.GetNumReactantTemplates()
-    nr_prod = rxn.GetNumProductTemplates()
-
-    if nr_react != 1 or nr_prod != 1:
-        raise RuntimeError("reaction must be single reactant -> single product")
-
-    products_list = rxn.RunReactants((mol,))
-
-    valid_products = []
-    seen_smiles = set()
-
-
-    for products in products_list:
-        product = products[0] 
-
-        try:
-            Chem.SanitizeMol(product)
-        except (Chem.AtomValenceException, Chem.KekulizeException):
-            continue
-
-        # Remove duplicates (can happen due to symmetry)
-        smi = Chem.MolToSmiles(product, canonical=True)
-        if smi not in seen_smiles:
-            seen_smiles.add(smi)
-            valid_products.append(product)
-
-    return valid_products
 
 
 
