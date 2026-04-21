@@ -6,7 +6,12 @@ import json
 import multiprocessing
 from os import linesep
 import pathlib
+from pathlib import Path
 import sys
+import joblib
+import tempfile
+import urllib.request
+import shutil
 
 from molscrub import Scrub
 from molscrub import SMIMolSupplierWrapper
@@ -21,6 +26,53 @@ Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
 RDLogger.DisableLog("rdApp.*")
 
 console = Console()
+
+
+#handle pka model downloading. 
+MODEL_URL = "https://github.com/forlilab/pkaPrediction/raw/refs/heads/main/models/ETR_latest_compressed.joblib"
+MODEL_FILENAME = "ETR_latest_compressed.joblib"
+
+CACHE_DIR = Path.home() / ".cache" / "molscrub"
+MODEL_PATH = CACHE_DIR / MODEL_FILENAME
+
+
+def download_model():
+    """
+    Download pKa model and store in chace directory
+    `$HOME/.cache/molscrub`
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print()
+    print("Downloading pickled ML model (one time only) from:")
+    print(MODEL_URL)
+    print("This will be saved in $HOME/.cache/molscrub/")
+    print()
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        urllib.request.urlretrieve(MODEL_URL, tmp_file.name)
+        tmp_path = Path(tmp_file.name)
+
+    shutil.move(str(tmp_path), MODEL_PATH)
+
+
+def verify_model():
+    """
+    Check if model is in cach directory. If not, download. 
+    """
+    if not MODEL_PATH.exists():
+        download_model()
+    else:
+        print()
+        print("pKa ML model found: ", MODEL_PATH)
+        print("download skipped")
+        print()
+
+
+def load_model():
+    verify_model()
+    model = joblib.load(MODEL_PATH)
+    return model
 
 try:
     import h5py
@@ -339,6 +391,11 @@ else:
 if args.pka_model != "rules" and args.pka_fname != None:
     raise ValueError(f"pka_model = {args.pka_model} and --pka_fname are incompatible. Use default pka reaction rules.")
 
+# read the model here to avoid reading in parallel
+if args.pka_model != "rules":
+    model_file = load_model()
+else:
+    model_file = None
  
 # set default numconfs
 if args.numconfs is None:
@@ -355,6 +412,7 @@ scrub = Scrub(
     ph_high,
     pka_fname=args.pka_fname,
     pka_model=args.pka_model,
+    model_file=model_file,
     tauto_fname=args.tauto_fname,
     skip_acidbase=args.skip_acidbase,
     skip_tautomers=args.skip_tautomers,
