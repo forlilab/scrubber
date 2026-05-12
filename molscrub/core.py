@@ -97,7 +97,11 @@ class Scrub:
         else:
             raise ValueError(f"{charge_model=} not supported")
 
-    def __call__(self, input_mol: Chem.Mol):
+    def __call__(self, input_mol: Chem.Mol) -> Chem.Mol:
+        """
+        the main scrubbing function, produces a list
+        of scrubbed molecules
+        """
 
         #check for fragments and keep the largest. 
         frags = Chem.GetMolFrags(input_mol, asMols=True)
