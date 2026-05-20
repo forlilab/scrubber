@@ -239,6 +239,7 @@ geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of tem
 geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
 geom.add_argument("--use_random_coords", help="use random coordinates for more robust (but slightly slower) embedding", action="store_true")
+geom.add_argument("--num_conformer_generation_attempts", help="number of times to retry conformer generation with a different random seed if it fails (default=1)", type=int, default=1)
 
 args = parser.parse_args()
 
@@ -362,6 +363,7 @@ scrub = Scrub(
     keep_all_frags=args.keep_all_frags,
     charge_model=args.charge_model,
     debug=args.debug,
+    num_conformer_generation_attempts=args.num_conformer_generation_attempts,
 )
 
 counter = {
@@ -381,6 +383,14 @@ def write_and_log(isomer_list, log, counter, writer, failed_mol_writer=None):
     elif "exception" in log:
         counter["failed"] += 1
         input_mol = isomer_list
+        if input_mol is not None and input_mol.GetNumHeavyAtoms() >= 49:
+            name = input_mol.GetProp("_Name") if input_mol.HasProp("_Name") else "unnamed"
+            print(
+                f"Warning: large molecule '{name}' ({input_mol.GetNumHeavyAtoms()} heavy atoms) "
+                f"failed conformer generation. Consider rerunning with "
+                f"--num_conformer_generation_attempts",
+                file=sys.stderr,
+            )
         if failed_mol_writer is not None:
             input_mol.SetProp("molscrub_caught_exception", str(log["exception"]))
             failed_mol_writer.write(input_mol)

@@ -45,6 +45,7 @@ class Scrub:
         keep_all_frags=False,
         charge_model=None,
         debug=False,
+        num_conformer_generation_attempts=1,
     ):
         if pka_fname is None:
             self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
@@ -82,6 +83,7 @@ class Scrub:
         self.keep_all_frags = keep_all_frags
         self.charge_model = charge_model
         self.debug = debug
+        self.num_conformer_generation_attempts = num_conformer_generation_attempts
 
         if ff == "espaloma":
             self.espaloma = EspalomaMinimizer()
@@ -142,22 +144,31 @@ class Scrub:
                 pool = copy_mcs_coordinates(ref_mol, pool)
 
             for mol in pool:
-                mol_out = gen3d(
-                    mol,
-                    skip_ringfix=self.skip_ringfix,
-                    max_ff_iter=self.max_ff_iter,
-                    skip_etkdg=self.skip_etkdg,
-                    etkdg_rng_seed=self.etkdg_rng_seed,
-                    use_random_coords=self.use_random_coords,
-                    numconfs=self.numconfs,
-                    ff=self.ff,
-                    espaloma=self.espaloma,
-                    template=self.template,
-                    template_smarts=self.template_smarts,
-                    ring_minimize = self.ring_minimize,
-                    energy_threshold = self.energy_threshold,
-                    debug=self.debug
-                )
+                mol_out = None
+                last_exc = None
+                for attempt in range(self.num_conformer_generation_attempts):
+                    try:
+                        mol_out = gen3d(
+                            mol,
+                            skip_ringfix=self.skip_ringfix,
+                            max_ff_iter=self.max_ff_iter,
+                            skip_etkdg=self.skip_etkdg,
+                            etkdg_rng_seed=self.etkdg_rng_seed + attempt,
+                            use_random_coords=self.use_random_coords,
+                            numconfs=self.numconfs,
+                            ff=self.ff,
+                            espaloma=self.espaloma,
+                            template=self.template,
+                            template_smarts=self.template_smarts,
+                            ring_minimize=self.ring_minimize,
+                            energy_threshold=self.energy_threshold,
+                            debug=self.debug
+                        )
+                        break
+                    except Exception as e:
+                        last_exc = e
+                if mol_out is None:
+                    raise last_exc
                 output_mol_list.append(mol_out)
         elif self.do_gen2d:  # useful to write SD files
             output_mol_list = []
