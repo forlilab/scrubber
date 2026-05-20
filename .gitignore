@@ -1,0 +1,15 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv/
+env/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Sphinx-specific
+docs/_build/
