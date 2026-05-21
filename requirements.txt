@@ -1,0 +1,5 @@
+numpy
+rdkit
+joblib
+rich
+pandas
