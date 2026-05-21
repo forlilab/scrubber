@@ -19,6 +19,64 @@ from .openff_toolkit import EspalomaMinimizer
 from .openff_toolkit import EspalomaCharger, NaglCharger
 from .geometry import gen3d
 
+import joblib
+import tempfile
+import urllib.request
+import shutil
+from pathlib import Path
+
+
+#handle pka model downloading. 
+MODEL_URL = "https://github.com/forlilab/pkaPrediction/raw/refs/heads/main/models/ETR_latest_compressed.joblib"
+MODEL_FILENAME = "ETR_latest_compressed.joblib"
+
+CACHE_DIR = Path.home() / ".cache" / "molscrub"
+MODEL_PATH = CACHE_DIR / MODEL_FILENAME
+
+
+def download_model():
+    """
+    Download pKa model and store in chace directory
+    `$HOME/.cache/molscrub`
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print()
+    print("Downloading pickled ML model (one time only) from:")
+    print(MODEL_URL)
+    print("This will be saved in $HOME/.cache/molscrub/")
+    print()
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        urllib.request.urlretrieve(MODEL_URL, tmp_file.name)
+        tmp_path = Path(tmp_file.name)
+
+    shutil.move(str(tmp_path), MODEL_PATH)
+
+
+def verify_model():
+    """
+    Check if model is in cach directory. If not, download. 
+    """
+    if not MODEL_PATH.exists():
+        download_model()
+    else:
+        print()
+        print("pKa ML model found: ", MODEL_PATH)
+        print("download skipped")
+        print()
+
+
+def load_model():
+    """
+    Load and return etr1 model. Checks if it's available and 
+    downloads into .cache directory of it's not. 
+    """
+    verify_model()
+    model = joblib.load(MODEL_PATH)
+    return model
+
+
 class Scrub:
 
     def __init__(
@@ -26,6 +84,8 @@ class Scrub:
         ph_low=7.4,
         ph_high=None,
         pka_fname=None,
+        pka_model="rules",
+        model_file=None,
         tauto_fname=None,
         skip_acidbase=False,
         skip_tautomers=False,
@@ -47,8 +107,13 @@ class Scrub:
         debug=False,
         num_etkdg_attempts=1,
     ):
+        
+        # this is needed if using API instead of CLI
+        if pka_model != "rules" and model_file == None:
+            model_file = load_model()
+
         if pka_fname is None:
-            self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files()
+            self.acid_base_conjugator = AcidBaseConjugator.from_default_data_files(model=model_file)
         else:
             reactions = AcidBaseConjugator.parse_reaction_file(pka_fname)
             self.acid_base_conjugator = AcidBaseConjugator(reactions)
@@ -62,6 +127,8 @@ class Scrub:
             ph_high = ph_low
         self.ph_high = ph_high
         self.do_acidbase = not skip_acidbase
+        self.pka_model = pka_model
+        self.model_file = model_file
         self.do_tautomers = not skip_tautomers
         self.skip_ringfix = (
             skip_ringfix  # not avoiding negative to pass directly to gen3d
@@ -99,7 +166,11 @@ class Scrub:
         else:
             raise ValueError(f"{charge_model=} not supported")
 
-    def __call__(self, input_mol: Chem.Mol):
+    def __call__(self, input_mol: Chem.Mol) -> Chem.Mol:
+        """
+        the main scrubbing function, produces a list
+        of scrubbed molecules
+        """
 
         #check for fragments and keep the largest. 
         frags = Chem.GetMolFrags(input_mol, asMols=True)
