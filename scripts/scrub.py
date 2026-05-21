@@ -404,14 +404,6 @@ def write_and_log(isomer_list, log, counter, writer, failed_mol_writer=None):
     elif "exception" in log:
         counter["failed"] += 1
         input_mol = isomer_list
-        if input_mol is not None and input_mol.GetNumHeavyAtoms() >= 49:
-            name = input_mol.GetProp("_Name") if input_mol.HasProp("_Name") else "unnamed"
-            # print(
-            #     f"Warning: large molecule '{name}' ({input_mol.GetNumHeavyAtoms()} heavy atoms) "
-            #     f"failed conformer generation. Consider rerunning with higher "
-            #     f"--num_etkdg_attempts",
-            #     file=sys.stderr,
-            # )
         if failed_mol_writer is not None:
             input_mol.SetProp("molscrub_caught_exception", str(log["exception"]))
             failed_mol_writer.write(input_mol)
