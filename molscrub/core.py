@@ -96,7 +96,8 @@ class Scrub:
         do_gen2d=False,
         max_ff_iter=400,
         skip_etkdg=False,
-        numconfs=1,
+        num_internal_confs=3,
+        min_output_confs=1,
         etkdg_rng_seed=None,
         use_random_coords=False,
         ff="mmff94s",
@@ -141,7 +142,10 @@ class Scrub:
         self.template_smarts = template_smarts
         self.do_gen2d = do_gen2d
         self.max_ff_iter = max_ff_iter
-        self.numconfs = numconfs
+        self.num_internal_confs = num_internal_confs
+        if min_output_confs < 1:
+            raise ValueError(f"min_output_confs must be greater than zero. Consider skip_gen3d=True instead.")
+        self.min_output_confs = min_output_confs
         self.etkdg_rng_seed = (
             etkdg_rng_seed if etkdg_rng_seed else random.randint(0, 1000000)
         )
@@ -203,7 +207,6 @@ class Scrub:
                     molset.add(mol_out)
             pool = list(molset)
 
-        
 
         if self.do_gen3d:
             output_mol_list = []
@@ -215,31 +218,40 @@ class Scrub:
                 pool = copy_mcs_coordinates(ref_mol, pool)
 
             for mol in pool:
-                mol_out = None
-                last_exc = None
-                try:
-                    mol_out = gen3d(
-                        mol,
-                        skip_ringfix=self.skip_ringfix,
-                        max_ff_iter=self.max_ff_iter,
-                        skip_etkdg=self.skip_etkdg,
-                        etkdg_rng_seed=self.etkdg_rng_seed,
-                        use_random_coords=self.use_random_coords,
-                        numconfs=self.numconfs,
-                        ff=self.ff,
-                        espaloma=self.espaloma,
-                        template=self.template,
-                        template_smarts=self.template_smarts,
-                        ring_minimize=self.ring_minimize,
-                        energy_threshold=self.energy_threshold,
-                        debug=self.debug,
-                        num_etkdg_attempts = self.num_etkdg_attempts
-                    )
-                except Exception as e:
-                    last_exc = e
+                confs = []
+                loop_count = 0
+                while len(confs) < self.min_output_confs:
+                    loop_count += 1
+                    mol_out = None
+                    last_exc = None
+                    try:
+                        mol_out = gen3d(
+                            mol,
+                            skip_ringfix=self.skip_ringfix,
+                            max_ff_iter=self.max_ff_iter,
+                            skip_etkdg=self.skip_etkdg,
+                            etkdg_rng_seed=self.etkdg_rng_seed + loop_count if self.etkdg_rng_seed != -1 else -1,
+                            use_random_coords=self.use_random_coords,
+                            num_internal_confs=self.num_internal_confs,
+                            ff=self.ff,
+                            espaloma=self.espaloma,
+                            template=self.template,
+                            template_smarts=self.template_smarts,
+                            ring_minimize=self.ring_minimize,
+                            energy_threshold=self.energy_threshold,
+                            debug=self.debug,
+                            num_etkdg_attempts = self.num_etkdg_attempts
+                        )
+                    except Exception as e:
+                        last_exc = e
 
-                if mol_out is None:
-                    raise last_exc
+                    if mol_out is None:
+                        raise last_exc
+                    confs += [conf for conf in mol_out.GetConformers()]
+                mol_out = Chem.Mol(mol_out)  # got MemoryError without this
+                mol_out.RemoveAllConformers()
+                for conf in confs:
+                    mol_out.AddConformer(conf, assignId=True)
                 output_mol_list.append(mol_out)
         elif self.do_gen2d:  # useful to write SD files
             output_mol_list = []
