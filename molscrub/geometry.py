@@ -224,7 +224,8 @@ def gen3d(
     template_smarts=None,
     ring_minimize=False,
     energy_threshold=0.5,
-    debug=False
+    debug=False,
+    num_etkdg_attempts = 1
 ):
 
 
@@ -267,7 +268,7 @@ def gen3d(
                 )
         else:
             # always start with best of numconfs conformers
-            mol, cids = find_best_conformer(mol, ps, numconfs, max_ff_iter, ff)
+            mol, cids = find_best_conformer(mol, ps, numconfs, num_etkdg_attempts, max_ff_iter, ff)
 
 
     if len(cids) == 0:

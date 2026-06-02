@@ -248,6 +248,7 @@ geom.add_argument("--template_smarts", help="SMARTs patter matching atoms of tem
 geom.add_argument("--ring_minimize", help="use FF energy minimization to determine optimal ring conformer", action="store_true")
 geom.add_argument("--energy_threshold", help="energy threshold for conformer distinction", default=0.5, type=float)
 geom.add_argument("--use_random_coords", help="use random coordinates for more robust (but slightly slower) embedding", action="store_true")
+geom.add_argument("--num_etkdg_attempts", help="number of times to retry conformer generation with a different random seed if it fails (default=1)", type=int, default=1)
 
 args = parser.parse_args()
 
@@ -383,6 +384,7 @@ scrub = Scrub(
     keep_all_frags=args.keep_all_frags,
     charge_model=args.charge_model,
     debug=args.debug,
+    num_etkdg_attempts=args.num_etkdg_attempts,
 )
 
 counter = {

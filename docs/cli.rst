@@ -145,6 +145,11 @@ Geometry Options
 
     Use random coordinates for more robust (but slower) ETKDG emebedding. 
 
+.. option:: --num_etkdg_attempts <num : int>
+
+    Number of ETKDG conformer generation attempts. Useful for large or unusual molecules
+    where ETKDG struggles to generate conformers. 
+
 .. option:: --ring_minimize 
 
     Use FF instead of heuristics to determine the optimal ring conformer (i.e. lower 

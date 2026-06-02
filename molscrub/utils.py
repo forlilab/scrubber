@@ -7,6 +7,7 @@ from rdkit.ForceField.rdForceField import ForceField
 import math
 
 import numpy as np
+import random
 
 from .openff_toolkit import EspalomaMinimizer
 
@@ -62,14 +63,36 @@ def add_conformers_to_mol(mol: Mol, conf_coords_list):
 
     return mol
 
-def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400, ff="mmff94s"):
+def find_best_conformer(mol: Mol, ps, num_confs=3, num_etkdg_attempts=1, max_ff_iter=400, ff="mmff94s"):
     """
     Generate multiple conformers with ETKDG and select the one 
     with the lowest energy
     """
 
+    attempts = num_etkdg_attempts
+
     cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
+
+    if mol.GetNumConformers() < 1 and attempts > 1:
+        print(f"First ETKDG attempt failed. Will try again until {num_etkdg_attempts} attempts")
+
+    while (mol.GetNumConformers() < 1 and attempts > 1):
+        print("attempt: ", num_etkdg_attempts - attempts + 2)
+        ps.randomSeed = random.randint(1,100)
+        cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
+        attempts -= 1 
+
+    # if it still fails... 
+    if mol.GetNumConformers() < 1:
+        name = mol.GetProp("_Name") if mol.HasProp("_Name") else "unnamed"
+        raise ValueError(f"\nETKDG conformer generation failed for molecule: {name} \n"+ 
+                         f"Your molecule may be too large or too weird for ETDKG \n"+
+                         f"Consider rerunning with higher --num_etkdg_attempts value. \n"+
+                         f"If all else fails, you can use --use_random_coords for slower \n"+
+                         "but more robust embedding. \n")
+
     mol, energies = optimize_conformers(mol, ff, max_ff_iter)
+
     if not energies:
         raise ValueError("No conformers could be optimized during initial generation.")
     
@@ -85,6 +108,7 @@ def find_best_conformer(mol: Mol, ps, num_confs=3, max_ff_iter=400, ff="mmff94s"
     best_mol.AddConformer(conf, assignId=True)
 
     return best_mol, [conf.GetId() for conf in mol.GetConformers()]
+
 #debug
 def write_conformers_to_sdf(mol, filename="test.sdf"):
     writer = Chem.SDWriter(filename)
