@@ -63,7 +63,7 @@ def add_conformers_to_mol(mol: Mol, conf_coords_list):
 
     return mol
 
-def find_best_conformer(mol: Mol, ps, num_confs=3, num_etkdg_attempts=1, max_ff_iter=400, ff="mmff94s"):
+def find_best_conformer(mol: Mol, ps, num_internal_confs=3, num_etkdg_attempts=1, max_ff_iter=400, ff="mmff94s"):
     """
     Generate multiple conformers with ETKDG and select the one 
     with the lowest energy
@@ -71,15 +71,15 @@ def find_best_conformer(mol: Mol, ps, num_confs=3, num_etkdg_attempts=1, max_ff_
 
     attempts = num_etkdg_attempts
 
-    cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
+    cids = rdDistGeom.EmbedMultipleConfs(mol, num_internal_confs, ps)
 
     if mol.GetNumConformers() < 1 and attempts > 1:
         print(f"First ETKDG attempt failed. Will try again until {num_etkdg_attempts} attempts")
 
     while (mol.GetNumConformers() < 1 and attempts > 1):
         print("attempt: ", num_etkdg_attempts - attempts + 2)
-        ps.randomSeed = random.randint(1,100)
-        cids = rdDistGeom.EmbedMultipleConfs(mol, num_confs, ps)
+        ps.randomSeed = ps.randomSeed + random.randint(1,100)
+        cids = rdDistGeom.EmbedMultipleConfs(mol, num_internal_confs, ps)
         attempts -= 1 
 
     # if it still fails... 

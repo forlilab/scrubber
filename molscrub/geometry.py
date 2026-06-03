@@ -24,7 +24,7 @@ def constrained_embeding(
     query_mol,
     core_mol,
     template_smarts: str = None,
-    numconfs: int = 1,
+    num_internal_confs: int = 1,
     ff: str = "mmff94s",
     ps=None,
 ):
@@ -87,7 +87,7 @@ def constrained_embeding(
 
         algMap = [(j, i) for j, i in zip(query_match, core_match)]
 
-    cids = rdDistGeom.EmbedMultipleConfs(query_mol, numconfs, ps)
+    cids = rdDistGeom.EmbedMultipleConfs(query_mol, num_internal_confs, ps)
 
     # rotate the embedded conformation onto the core:
     rms = rdMolAlign.AlignMol(query_mol, core_mol, atomMap=algMap)
@@ -217,7 +217,7 @@ def gen3d(
     skip_etkdg: bool = False,
     etkdg_rng_seed: int = 42,
     use_random_coords=False,
-    numconfs: int = 1,
+    num_internal_confs: int = 1,
     ff: str = "mmff94s",
     espaloma=None,
     template=None,
@@ -250,7 +250,7 @@ def gen3d(
             query_mol=mol,
             core_mol=template,
             template_smarts=template_smarts,
-            numconfs=numconfs,
+            num_internal_confs=num_internal_confs,
             ff=ff,
             ps=ps,
         )
@@ -268,7 +268,7 @@ def gen3d(
                 )
         else:
             # always start with best of numconfs conformers
-            mol, cids = find_best_conformer(mol, ps, numconfs, num_etkdg_attempts, max_ff_iter, ff)
+            mol, cids = find_best_conformer(mol, ps, num_internal_confs, num_etkdg_attempts, max_ff_iter, ff)
 
 
     if len(cids) == 0:
