@@ -159,12 +159,11 @@ class MolSupplier:
                 is_repeated = True
                 while is_repeated:
                     mol = self.supplier.__next__()
+                    if mol is None:
+                        return mol
                     name = mol.GetProp("_Name")
                     is_repeated = name in self.names
-                if is_repeated:
-                    raise StopIteration
-            else:
-                self.names.add(name)
+            self.names.add(name)
         if self.rename_to_int:
             name = mol.GetProp("_Name")
             newname = self._rename(name)
