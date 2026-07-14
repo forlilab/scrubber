@@ -3,7 +3,9 @@
 [nX2,NX2,S,O,Se,Te:1]=,:[C,c,nX2,NX2:6][C,c,NX2,nX2:5]=,:[C,c,nX2,NX2:2][Nh,nh,Sh,sh,Oh,oh,Seh,Teh:3]>>[#1][N,S,O,Se,Te:1][C,NX2:6]=,:[C,N:5][C,#7X2:2]=,:[NX2,S,O,Se,Te:3] P-07
 [nX2,NX2,S,O,Se,Te,Cz0X3:1]:,=[c,C,NX2,nX2:6][C,c,NX2,nX2:5]:,=[C,c,NX2,nX2:2][C,c,NX2,nX2:7]:,=[C,c,NX2,nX2:8][Nh,nh,Sh,sh,Oh,oh,Seh,Teh,CX4z0h:3]>>[#1][N,n,S,O,Se,Te,Cz0X4:1][C,c,NX2,nX2:6]=[C,c:5][C,c,NX2,nX2:2]=[C,c,NX2,nX2:7][C,c,NX2,nX2:8]=[NX2,S,O,Se,Te,CX3z0:3] P-09
 KEEPMAX_SMARTS [a] aromatic
-KEEPMAX_SMARTS [OX1,SX1]=[CX3][NX3] amide
-KEEPMAX_SMARTS [CX4][CX3,PX4](=[OX1]) acetone 
+KEEPMAX_SMARTS [OX1,SX1]=[#6X3][#7X3] amide
+# KEEPMAX_SMARTS [CX4][CX3,PX4](=[OX1]) acetone 
 KEEPMIN_SMARTS [#6X3][NX4+1] anilinium
-KEEPMIN_SMARTS [#7X2H1+0]=[*] imine
+KEEPMIN_SMARTS [NX2+0]=c imine
+KEEPMIN_SMARTS [NX3+0]C=C enamine
+KEEPMIN_SMARTS [#6]=[CX3,PX4][OX2H1] enol
