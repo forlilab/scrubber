@@ -132,12 +132,14 @@ class MolSupplier:
         molecule names to integers, and to set rdkit mol names from properties
     """
 
-    def __init__(self, supplier, name_from_prop=None, rename_to_int=False, nr_digits=10):
+    def __init__(self, supplier, name_from_prop=None, rename_to_int=False, nr_digits=10, drop_duplicate_names=False):
         self.supplier = supplier
         self.name_from_prop = name_from_prop
         self.rename_to_int = rename_to_int
         self.nr_digits = nr_digits
-        self.names = {}
+        self.drop_duplicate_names = drop_duplicate_names
+        self.counter_to_names = {}
+        self.names = set()
         self.counter = 0
         
     def __iter__(self):
@@ -151,6 +153,17 @@ class MolSupplier:
         if self.name_from_prop:
             name = mol.GetProp(self.name_from_prop)
             mol.SetProp("_Name", name)
+        if self.drop_duplicate_names:
+            name = mol.GetProp("_Name")
+            if name in self.names:
+                is_repeated = True
+                while is_repeated:
+                    mol = self.supplier.__next__()
+                    if mol is None:
+                        return mol
+                    name = mol.GetProp("_Name")
+                    is_repeated = name in self.names
+            self.names.add(name)
         if self.rename_to_int:
             name = mol.GetProp("_Name")
             newname = self._rename(name)
@@ -181,7 +194,7 @@ class MolSupplier:
         #if name in self.names:
         #    raise RuntimeError("repeated molecule name: %s" % name)
         #self.names[name] = self.counter
-        self.names[self.counter] = name
+        self.counter_to_names[self.counter] = name
         tmp = "RN%0" + "%d" % self.nr_digits + "d"
         return tmp % self.counter
 
@@ -211,6 +224,7 @@ basic = parser.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
 basic.add_argument("--write_failed_mols", help="filename for failed molecules (.sdf)")
 basic.add_argument("--name_from_prop", help="set molecule name from RDKit/SDF property")
+basic.add_argument("--drop_duplicate_names", help="ignore duplicate molecules based on name field", action="store_true")
 basic.add_argument("--ph", help="pH value for acid/base transformations", default=7.4, type=float)
 basic.add_argument("--skip_acidbase", help="skip enumeration of acid/base conjugates", action="store_true")
 basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", action="store_true")
@@ -314,11 +328,12 @@ if args.template_smarts is not None:
 else:
     template_smarts = None
 
-if args.wcg or args.name_from_prop:
+if args.wcg or args.name_from_prop or args.drop_duplicate_names:
     supplier = MolSupplier(
         supplier,
         name_from_prop=args.name_from_prop,
-        rename_to_int=args.wcg
+        rename_to_int=args.wcg,
+        drop_duplicate_names=args.drop_duplicate_names,
     )
 
 # output
@@ -468,5 +483,5 @@ if __name__ == '__main__':
         fname = pathlib.Path(args.out_fname).with_suffix(".renaming.json")
         print("Writing %s" % (fname))
         with open(fname, "w") as f:
-            json.dump(supplier.names, f)
+            json.dump(supplier.counter_to_names, f)
         print("Done.")
