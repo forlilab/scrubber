@@ -276,6 +276,15 @@ class Scrub:
         log["input_mol_none"] = False
         try:
             isomer_list_if_ok_else_input = self(input_mol)
+            if (type(isomer_list_if_ok_else_input) == list
+                and len(isomer_list_if_ok_else_input) == 0):
+                isomer_list_if_ok_else_input = input_mol
+                if input_mol.HasProp("_Name"):
+                    name_str = f" (name: {input_mol.GetProp('_Name')})"
+                else:
+                    name_str = ""
+                log["exception"] = f"Scrub instance returned an empty list (BUG LIKELY) returning input mol instead{name_str}."
+                
         except Exception as e:
             log["exception"] = e
             isomer_list_if_ok_else_input = input_mol
