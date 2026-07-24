@@ -201,7 +201,7 @@ class Scrub:
             pool = list(molset)
 
         print("jani debug pool after acidbase")
-        print(pool)
+        print([Chem.MolToSmiles(m) for m in pool])
         if self.do_tautomers:
             molset = UniqueMoleculeContainer()
             for mol in pool:
@@ -210,7 +210,7 @@ class Scrub:
             pool = list(molset)
 
         print("jani debug pool after tautomers")
-        print(pool)
+        print([Chem.MolToSmiles(m) for m in pool])
 
         if self.do_gen3d:
             output_mol_list = []
