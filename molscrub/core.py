@@ -200,17 +200,12 @@ class Scrub:
                     molset.add(mol_out)
             pool = list(molset)
 
-        print("jani debug pool after acidbase")
-        print([Chem.MolToSmiles(m) for m in pool])
         if self.do_tautomers:
             molset = UniqueMoleculeContainer()
             for mol in pool:
                 for mol_out in self.tautomerizer(mol):
                     molset.add(mol_out)
             pool = list(molset)
-
-        print("jani debug pool after tautomers")
-        print([Chem.MolToSmiles(m) for m in pool])
 
         if self.do_gen3d:
             output_mol_list = []

@@ -79,6 +79,7 @@ class ProtonationPairsList:
 
     @staticmethod
     def find_protonation_pairs(mols):
+        # neutralize to get reference skeleton
         def neutralize(mol):
             m = Chem.RWMol(mol)
             for a in m.GetAtoms():
@@ -112,38 +113,7 @@ class ProtonationPairsList:
                 ))
         return ProtonationPairsList(results)
 
-    # @staticmethod
-    # def find_protonation_pairs(mols: list[Chem.Mol]) -> "ProtonationPairsList":
-    #     smarts = Chem.MolToSmarts(mols[0])
-    #     for tok in ('-]', '+]'):
-    #         smarts = smarts.replace(tok, ']')
-    #     smarts = smarts.replace('-', '~')
-    #     template = Chem.MolFromSmarts(smarts)
-    
-    #     frames = [m.GetSubstructMatch(template) for m in mols]
-    
-    #     def sig(m, frame):
-    #         return tuple((m.GetAtomWithIdx(k).GetFormalCharge(),
-    #                         m.GetAtomWithIdx(k).GetTotalNumHs()) for k in frame)
-    
-    #     sigs = [sig(m, f) for m, f in zip(mols, frames)]
-    
-    #     results = []
-    #     for i, j in combinations(range(len(mols)), 2):
-    #         diff_positions = [p for p, (a, b) in enumerate(zip(sigs[i], sigs[j])) if a != b]
-    #         if len(diff_positions) == 1:
-    #             p = diff_positions[0]
-    #             atom_i = frames[i][p]   # real atom index in mol i
-    #             atom_j = frames[j][p]   # real atom index in mol j
-    #             results.append(ProtonationPair(
-    #                 pair = (i, j),
-    #                 scaffold_pos = p,
-    #                 atom_idx_i = atom_i,
-    #                 atom_idx_j = atom_j,
-    #                 state_i = sigs[i][p],   # (formal_charge, num_Hs) in mol i
-    #                 state_j = sigs[j][p])
-    #             )
-    #     return ProtonationPairsList(results)
+
 
     
     def find_pair(self, protonated_atom_i:int) -> ProtonationPair:
@@ -214,13 +184,11 @@ class AcidBaseConjugator:
                 ml_pka = rxn["ml_pka"]
                 if ph_range_high < ml_pka:
                     if rxn["direction"] == "lose_h":
-                        print(rxn["rxn_name"], ml_pka, rxn["direction"])
                         passed += 1
                         props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
 
                 elif ph_range_low > ml_pka: 
                     if rxn["direction"] == "gain_h":
-                        print(rxn["rxn_name"], ml_pka, rxn["direction"])
                         passed += 1
                         props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
                 else: 
@@ -421,7 +389,6 @@ class AcidBaseConjugator:
         reacted_mols = []
         seen_smiles = set()
 
-        unique_atom_index = 0
         for i,r in enumerate(self.pka_reactions):
             temp_forward = self.convert_all_single_sites(mol, r["rxn_gain_h"])
             
@@ -433,10 +400,6 @@ class AcidBaseConjugator:
                     changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
 
-                    #jani debug
-                    unique_atom_index +=1
-                    atom = mol.GetAtomWithIdx(changed_atom)
-                    atom.SetAtomMapNum(unique_atom_index)
                     reacted_mols.append({"original": mol,
                                         "product": m, 
                                         "rule_pka": r["pka"], 
@@ -458,10 +421,6 @@ class AcidBaseConjugator:
                     seen_smiles.add(smi)
                     changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
-                    #jani debug
-                    unique_atom_index +=1
-                    atom = mol.GetAtomWithIdx(changed_atom)
-                    atom.SetAtomMapNum(unique_atom_index)
                     reacted_mols.append({"original": mol,
                                         "product":m, 
                                         "rule_pka": r["pka"], 
@@ -508,8 +467,7 @@ class AcidBaseConjugator:
         # rdkit descriptors
         descriptors = self.getMolDescriptors(mol)
         desc_df = pd.DataFrame([descriptors])
-        # print("jani debug descriptors")
-        # pprint(descriptors)
+
 
         x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
 
