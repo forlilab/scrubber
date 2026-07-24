@@ -11,16 +11,149 @@ import pandas as pd
 from rdkit.Chem import Descriptors
 from collections import deque
 import itertools
-
+from pprint import pprint
 
 from pathlib import Path
-
+from dataclasses import dataclass, field
+from itertools import combinations
+from typing import TypedDict
+from rdkit.Chem.rdChemReactions import ChemicalReaction
+import numpy.typing as npt
 
 
 
 datapath = files("molscrub") / "data"
 default_tautomers_fn = datapath / "tautomers.txt"
 default_pka_reactions_fn = datapath / "pka_reactions.txt"
+
+
+
+
+# define the pka reaction data as a typed dict. 
+class RxnInfo(TypedDict):
+    original: Chem.Mol
+    product: Chem.Mol 
+    rule_pka: float
+    rxn_name: str 
+    rxn_gain_h: ChemicalReaction
+    rxn_lose_h: ChemicalReaction
+    direction: str
+    protonated_atom: int 
+    rxn_1hot_encoding: npt.NDArray[np.integer]
+    ml_pka: float
+    averaged: bool
+
+
+
+@dataclass(frozen=True)
+class ProtonationPair:
+    """pair of mols i and j which have the opposite protonation state
+    in exactly one protonatable site
+    """
+    pair: tuple[int,int]
+    atom_idx_i: int
+    atom_idx_j: int
+    state_i: tuple[int,int] #charge and numHs
+    state_j: tuple[int,int]
+
+
+
+
+@dataclass
+class ProtonationPairsList:
+    """pairs of mols i and j which have the opposite protonation state
+    in exactly one protonatable site
+    """
+    items: list[ProtonationPair]  = field(default_factory=list)
+
+    # Enables reading with square brackets: obj[index]
+    def __getitem__(self, index):
+        return self.items[index]
+
+    # Enables writing with square brackets: obj[index] = value
+    def __setitem__(self, index, value):
+        self.items[index] = value
+
+    def __len__(self):
+        return len(self.items)
+
+    @staticmethod
+    def find_protonation_pairs(mols):
+        def neutralize(mol):
+            m = Chem.RWMol(mol)
+            for a in m.GetAtoms():
+                a.SetFormalCharge(0)
+                a.SetNumExplicitHs(0)
+                a.SetNoImplicit(False)
+            m = m.GetMol()
+            Chem.SanitizeMol(m)
+            return m
+
+        ref = neutralize(mols[0])
+        frames = [neutralize(m).GetSubstructMatch(ref) for m in mols]
+
+        def sig(m, frame):
+            return tuple((m.GetAtomWithIdx(k).GetFormalCharge(),
+                        m.GetAtomWithIdx(k).GetTotalNumHs()) for k in frame)
+
+        sigs = [sig(m, f) for m, f in zip(mols, frames)]
+
+        results = []
+        for i, j in combinations(range(len(mols)), 2):
+            diff = [p for p, (a, b) in enumerate(zip(sigs[i], sigs[j])) if a != b]
+            if len(diff) == 1:
+                p = diff[0]
+                results.append(ProtonationPair(
+                    pair = (i, j),
+                    atom_idx_i = frames[i][p],
+                    atom_idx_j = frames[j][p],
+                    state_i = sigs[i][p],
+                    state_j = sigs[j][p],
+                ))
+        return ProtonationPairsList(results)
+
+    # @staticmethod
+    # def find_protonation_pairs(mols: list[Chem.Mol]) -> "ProtonationPairsList":
+    #     smarts = Chem.MolToSmarts(mols[0])
+    #     for tok in ('-]', '+]'):
+    #         smarts = smarts.replace(tok, ']')
+    #     smarts = smarts.replace('-', '~')
+    #     template = Chem.MolFromSmarts(smarts)
+    
+    #     frames = [m.GetSubstructMatch(template) for m in mols]
+    
+    #     def sig(m, frame):
+    #         return tuple((m.GetAtomWithIdx(k).GetFormalCharge(),
+    #                         m.GetAtomWithIdx(k).GetTotalNumHs()) for k in frame)
+    
+    #     sigs = [sig(m, f) for m, f in zip(mols, frames)]
+    
+    #     results = []
+    #     for i, j in combinations(range(len(mols)), 2):
+    #         diff_positions = [p for p, (a, b) in enumerate(zip(sigs[i], sigs[j])) if a != b]
+    #         if len(diff_positions) == 1:
+    #             p = diff_positions[0]
+    #             atom_i = frames[i][p]   # real atom index in mol i
+    #             atom_j = frames[j][p]   # real atom index in mol j
+    #             results.append(ProtonationPair(
+    #                 pair = (i, j),
+    #                 scaffold_pos = p,
+    #                 atom_idx_i = atom_i,
+    #                 atom_idx_j = atom_j,
+    #                 state_i = sigs[i][p],   # (formal_charge, num_Hs) in mol i
+    #                 state_j = sigs[j][p])
+    #             )
+    #     return ProtonationPairsList(results)
+
+    
+    def find_pair(self, protonated_atom_i:int) -> ProtonationPair:
+        '''Given the index of the protonated atom of molecule i, 
+        find the corresponding molecular pair which contains the 
+        molecule with the opposite protonation state at the same
+        site. 
+        '''
+        pass
+
 
 
 class AcidBaseConjugator:
@@ -52,6 +185,10 @@ class AcidBaseConjugator:
         all_mols = self.generate_all_protonation_states(modified_mol)
         rxn_info = [self.get_rxn_info(m) for m in all_mols]
 
+        # compute pairwise pkas and average: 
+        pairs = ProtonationPairsList.find_protonation_pairs(all_mols)
+        rxn_info = self.compute_pairwise_pkas(pairs, rxn_info)
+
 
         # debug
         # for gr in rxn_info:
@@ -74,18 +211,21 @@ class AcidBaseConjugator:
                 # if group is acidic and deprotonated (i.e. in the rxn will gain h)
                 # if group is basic and is protonated (i.e. in the rxn will lose h)
 
-                ml_pka = self.calculate_pka(rxn["original"], rxn, model=model)[0]
+                ml_pka = rxn["ml_pka"]
                 if ph_range_high < ml_pka:
                     if rxn["direction"] == "lose_h":
+                        print(rxn["rxn_name"], ml_pka, rxn["direction"])
                         passed += 1
                         props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
 
                 elif ph_range_low > ml_pka: 
                     if rxn["direction"] == "gain_h":
+                        print(rxn["rxn_name"], ml_pka, rxn["direction"])
                         passed += 1
                         props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
                 else: 
                     # accept no matter what. 
+                    print("else branch", rxn["rxn_name"], ml_pka, rxn["direction"])
                     passed += 1
                     props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
 
@@ -132,6 +272,55 @@ class AcidBaseConjugator:
                 prop = {"name": p["rxn_name"], "atom": p["protonated_atom"], "pKa": p["rule_pka"]}
                 mol.SetProp(f"pka_props_{i}", str(prop))
         return mol_list
+
+    def compute_pairwise_pkas(self, pairs_list: ProtonationPairsList, 
+                              rxn_info: list[list[RxnInfo]]) -> list[list[RxnInfo]]:
+        """
+        Loops through pairwise protonation states, computes the pkas of each
+        protonatable site, then averages the pkas of the protonated and deprotonated
+        sites when they're chemical environment is the same. 
+
+        This is necessary because the ML model can predict slightly different 
+        pkas for the protonated and deprotonated state of the same molecule.
+        """
+
+        # strategy
+        # loop over pairs (i,j)
+        # calculate pkas for each pair (once, check if it already exists)
+        # average pkas between complementary pairs; replace individual pkas with average one
+        # return rxn_info with updated "averaged" pkas. 
+
+        for pair in pairs_list:
+            i,j = pair.pair
+            atom_idx_i = pair.atom_idx_i
+            atom_idx_j = pair.atom_idx_j
+            # rxns_i: list[RxnInfo] = rxn_info[i]
+            # rxns_j: list[RxnInfo] = rxn_info[j]
+
+            # loop over sites / aka reactions
+            saved_i = None
+            saved_j = None 
+            for ir,r in enumerate(rxn_info[i]):
+                if r["ml_pka"] is None:
+                    ml_pka = self.calculate_pka(r["original"], r, model=self.pka_model)[0]
+                    rxn_info[i][ir]["ml_pka"] = ml_pka
+                if r["protonated_atom"] == atom_idx_i:
+                    saved_i = ir
+            for jr, r in enumerate(rxn_info[j]):
+                if r["ml_pka"] is None:
+                    ml_pka = self.calculate_pka(r["original"], r, model=self.pka_model)[0]
+                    rxn_info[j][jr]["ml_pka"] = ml_pka
+                if r["protonated_atom"] == atom_idx_j:
+                    saved_j = jr
+
+            # now average pkas using saved indices.
+            mean_pka = (rxn_info[i][saved_i]["ml_pka"] + rxn_info[j][saved_j]["ml_pka"]) / 2.0
+            rxn_info[i][saved_i]["ml_pka"] = mean_pka
+            rxn_info[j][saved_j]["ml_pka"] = mean_pka
+            rxn_info[i][saved_i]["averaged"] = True 
+            rxn_info[j][saved_j]["averaged"] = True
+
+        return rxn_info
 
     def mol_comparisons(self, mol1, mol2):
         """
@@ -201,7 +390,7 @@ class AcidBaseConjugator:
         # If multiple changed atoms, return None 
         return None
 
-    def get_rxn_info(self, mol) -> list:
+    def get_rxn_info(self, mol) -> list[list[RxnInfo]]:
         """
         this function runs a mol object through all possible reactions and
         returns information in the form of a dictionary on the reactions that succeed. 
@@ -232,7 +421,7 @@ class AcidBaseConjugator:
         reacted_mols = []
         seen_smiles = set()
 
-
+        unique_atom_index = 0
         for i,r in enumerate(self.pka_reactions):
             temp_forward = self.convert_all_single_sites(mol, r["rxn_gain_h"])
             
@@ -243,6 +432,11 @@ class AcidBaseConjugator:
                     seen_smiles.add(smi)
                     changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
+
+                    #jani debug
+                    unique_atom_index +=1
+                    atom = mol.GetAtomWithIdx(changed_atom)
+                    atom.SetAtomMapNum(unique_atom_index)
                     reacted_mols.append({"original": mol,
                                         "product": m, 
                                         "rule_pka": r["pka"], 
@@ -251,7 +445,9 @@ class AcidBaseConjugator:
                                         "rxn_lose_h": r["rxn_lose_h"],
                                         "direction": "gain_h", 
                                         "protonated_atom": changed_atom, 
-                                        "rxn_1hot_encoding": self._one_hot(size, i)})
+                                        "rxn_1hot_encoding": self._one_hot(size, i),
+                                        "ml_pka": None,
+                                        "averaged": False})
 
             temp_backward = self.convert_all_single_sites(mol, r["rxn_lose_h"])
 
@@ -262,6 +458,10 @@ class AcidBaseConjugator:
                     seen_smiles.add(smi)
                     changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
+                    #jani debug
+                    unique_atom_index +=1
+                    atom = mol.GetAtomWithIdx(changed_atom)
+                    atom.SetAtomMapNum(unique_atom_index)
                     reacted_mols.append({"original": mol,
                                         "product":m, 
                                         "rule_pka": r["pka"], 
@@ -270,7 +470,9 @@ class AcidBaseConjugator:
                                         "rxn_lose_h": r["rxn_lose_h"], 
                                         "direction": "lose_h", 
                                         "protonated_atom": changed_atom, 
-                                        "rxn_1hot_encoding": self._one_hot(size, i)})
+                                        "rxn_1hot_encoding": self._one_hot(size, i),
+                                        "ml_pka": None,
+                                        "averaged": False})
         
         return reacted_mols
 
@@ -306,6 +508,8 @@ class AcidBaseConjugator:
         # rdkit descriptors
         descriptors = self.getMolDescriptors(mol)
         desc_df = pd.DataFrame([descriptors])
+        # print("jani debug descriptors")
+        # pprint(descriptors)
 
         x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
 
