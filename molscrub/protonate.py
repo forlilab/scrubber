@@ -38,7 +38,8 @@ class RxnInfo(TypedDict):
     rxn_gain_h: ChemicalReaction
     rxn_lose_h: ChemicalReaction
     direction: str
-    protonated_atom: int 
+    reactant_atom: int
+    product_atom: int 
     rxn_1hot_encoding: npt.NDArray[np.integer]
     ml_pka: float
     averaged: bool
@@ -51,10 +52,7 @@ class ProtonationPair:
     in exactly one protonatable site
     """
     pair: tuple[int,int]
-    atom_idx_i: int
-    atom_idx_j: int
-    state_i: tuple[int,int] #charge and numHs
-    state_j: tuple[int,int]
+    atom_pairs: tuple[int,int]
 
 
 
@@ -77,52 +75,6 @@ class ProtonationPairsList:
     def __len__(self):
         return len(self.items)
 
-    @staticmethod
-    def find_protonation_pairs(mols):
-        # neutralize to get reference skeleton
-        def neutralize(mol):
-            m = Chem.RWMol(mol)
-            for a in m.GetAtoms():
-                a.SetFormalCharge(0)
-                a.SetNumExplicitHs(0)
-                a.SetNoImplicit(False)
-            m = m.GetMol()
-            Chem.SanitizeMol(m)
-            return m
-
-        ref = neutralize(mols[0])
-        frames = [neutralize(m).GetSubstructMatch(ref) for m in mols]
-
-        def sig(m, frame):
-            return tuple((m.GetAtomWithIdx(k).GetFormalCharge(),
-                        m.GetAtomWithIdx(k).GetTotalNumHs()) for k in frame)
-
-        sigs = [sig(m, f) for m, f in zip(mols, frames)]
-
-        results = []
-        for i, j in combinations(range(len(mols)), 2):
-            diff = [p for p, (a, b) in enumerate(zip(sigs[i], sigs[j])) if a != b]
-            if len(diff) == 1:
-                p = diff[0]
-                results.append(ProtonationPair(
-                    pair = (i, j),
-                    atom_idx_i = frames[i][p],
-                    atom_idx_j = frames[j][p],
-                    state_i = sigs[i][p],
-                    state_j = sigs[j][p],
-                ))
-        return ProtonationPairsList(results)
-
-
-
-    
-    def find_pair(self, protonated_atom_i:int) -> ProtonationPair:
-        '''Given the index of the protonated atom of molecule i, 
-        find the corresponding molecular pair which contains the 
-        molecule with the opposite protonation state at the same
-        site. 
-        '''
-        pass
 
 
 
@@ -130,6 +82,8 @@ class AcidBaseConjugator:
     def __init__(self, pka_reactions, pka_model=None):
         self.pka_reactions = pka_reactions
         self.pka_model = pka_model
+        self.pair_edges = None
+        self.all_states = None
 
     def __call__(self, input_mol, ph_range_low, ph_range_high):
         if ph_range_low > ph_range_high:
@@ -156,7 +110,7 @@ class AcidBaseConjugator:
         rxn_info = [self.get_rxn_info(m) for m in all_mols]
 
         # compute pairwise pkas and average: 
-        pairs = ProtonationPairsList.find_protonation_pairs(all_mols)
+        pairs = self.build_pairs()
         rxn_info = self.compute_pairwise_pkas(pairs, rxn_info)
 
 
@@ -185,17 +139,16 @@ class AcidBaseConjugator:
                 if ph_range_high < ml_pka:
                     if rxn["direction"] == "lose_h":
                         passed += 1
-                        props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
+                        props.append({"name": rxn["rxn_name"], "atom": rxn["reactant_atom"], "pKa":ml_pka})
 
                 elif ph_range_low > ml_pka: 
                     if rxn["direction"] == "gain_h":
                         passed += 1
-                        props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
+                        props.append({"name": rxn["rxn_name"], "atom": rxn["reactant_atom"], "pKa":ml_pka})
                 else: 
                     # accept no matter what. 
-                    print("else branch", rxn["rxn_name"], ml_pka, rxn["direction"])
                     passed += 1
-                    props.append({"name": rxn["rxn_name"], "atom": rxn["protonated_atom"], "pKa":ml_pka})
+                    props.append({"name": rxn["rxn_name"], "atom": rxn["reactant_atom"], "pKa":ml_pka})
 
 
             root_mol = all_mols[igr]
@@ -237,7 +190,7 @@ class AcidBaseConjugator:
             copy_mol_props(input_mol, mol)
             props = self.get_rxn_info(mol)
             for i, p in enumerate(props):
-                prop = {"name": p["rxn_name"], "atom": p["protonated_atom"], "pKa": p["rule_pka"]}
+                prop = {"name": p["rxn_name"], "atom": p["reactant_atom"], "pKa": p["rule_pka"]}
                 mol.SetProp(f"pka_props_{i}", str(prop))
         return mol_list
 
@@ -260,25 +213,25 @@ class AcidBaseConjugator:
 
         for pair in pairs_list:
             i,j = pair.pair
-            atom_idx_i = pair.atom_idx_i
-            atom_idx_j = pair.atom_idx_j
+            atom_idx_i, atom_idx_j = pair.atom_pairs
             # rxns_i: list[RxnInfo] = rxn_info[i]
             # rxns_j: list[RxnInfo] = rxn_info[j]
 
             # loop over sites / aka reactions
             saved_i = None
             saved_j = None 
+
             for ir,r in enumerate(rxn_info[i]):
                 if r["ml_pka"] is None:
                     ml_pka = self.calculate_pka(r["original"], r, model=self.pka_model)[0]
                     rxn_info[i][ir]["ml_pka"] = ml_pka
-                if r["protonated_atom"] == atom_idx_i:
+                if r["reactant_atom"] == atom_idx_i:
                     saved_i = ir
             for jr, r in enumerate(rxn_info[j]):
                 if r["ml_pka"] is None:
                     ml_pka = self.calculate_pka(r["original"], r, model=self.pka_model)[0]
                     rxn_info[j][jr]["ml_pka"] = ml_pka
-                if r["protonated_atom"] == atom_idx_j:
+                if r["reactant_atom"] == atom_idx_j:
                     saved_j = jr
 
             # now average pkas using saved indices.
@@ -303,18 +256,16 @@ class AcidBaseConjugator:
     def _one_hot(self, size, index):
         return np.eye(size)[index]
 
-    def find_protonation_site_with_mcs(self, original: Chem.Mol, reacted: Chem.Mol):
+    def find_protonation_site_with_mcs(self, original: Chem.Mol, reacted: Chem.Mol, return_both: bool = False):
         """
         Finds the atom index in `original` that changed protonation state
         by computing maximal structural overlap (MCS) and building
         an optimal atom mapping.
         
         Returns:
-            original atom index that changed
+            original atom index that changed for products and reactants (optional)
             or None if no unique site found
         """
-
-        # Compute MCS
         mcs = rdFMCS.FindMCS(
             [original, reacted],
             bondCompare=rdFMCS.BondCompare.CompareOrder,
@@ -322,41 +273,26 @@ class AcidBaseConjugator:
             ringMatchesRingOnly=True,
             completeRingsOnly=True,
         )
-
         if mcs.canceled or mcs.numAtoms == 0:
-            return None
+            return (None, None) if return_both else None
 
         mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
-
-        # Get atom matches
         match_orig = original.GetSubstructMatch(mcs_mol)
         match_react = reacted.GetSubstructMatch(mcs_mol)
-
         if not match_orig or not match_react:
-            return None
+            return (None, None) if return_both else None
 
-        # Build mapping: reacted_idx to original_idx
-        react_to_orig = dict(zip(match_react, match_orig))
+        changed = [(o, r) for r, o in zip(match_react, match_orig)
+                if original.GetAtomWithIdx(o).GetFormalCharge()
+                    != reacted.GetAtomWithIdx(r).GetFormalCharge()
+                or original.GetAtomWithIdx(o).GetTotalNumHs()
+                    != reacted.GetAtomWithIdx(r).GetTotalNumHs()]
 
-        # Detect changed atom
-        changed_atoms = []
+        if len(changed) == 1:
+            o_idx, r_idx = changed[0]
+            return (o_idx, r_idx) if return_both else o_idx
+        return (None, None) if return_both else None
 
-        for r_idx, o_idx in react_to_orig.items():
-
-            atom_orig = original.GetAtomWithIdx(o_idx)
-            atom_react = reacted.GetAtomWithIdx(r_idx)
-
-            if (
-                atom_orig.GetFormalCharge() != atom_react.GetFormalCharge()
-                or atom_orig.GetTotalNumHs() != atom_react.GetTotalNumHs()
-            ):
-                changed_atoms.append(o_idx)
-
-        if len(changed_atoms) == 1:
-            return changed_atoms[0]
-
-        # If multiple changed atoms, return None 
-        return None
 
     def get_rxn_info(self, mol) -> list[list[RxnInfo]]:
         """
@@ -384,7 +320,6 @@ class AcidBaseConjugator:
         rxn_1hot_encoding: array of 1-hot encodings indicating which reaction succeeded. 
         """
 
-
         size = len(self.pka_reactions)
         reacted_mols = []
         seen_smiles = set()
@@ -392,13 +327,10 @@ class AcidBaseConjugator:
         for i,r in enumerate(self.pka_reactions):
             temp_forward = self.convert_all_single_sites(mol, r["rxn_gain_h"])
             
-            for m in temp_forward:
+            for m, parent, child in temp_forward:
                 smi = Chem.MolToSmiles(m, canonical=True) 
-
                 if smi not in seen_smiles:
                     seen_smiles.add(smi)
-                    changed_atom = self.find_protonation_site_with_mcs(mol, m)
-
 
                     reacted_mols.append({"original": mol,
                                         "product": m, 
@@ -407,19 +339,19 @@ class AcidBaseConjugator:
                                         "rxn_gain_h": r["rxn_gain_h"], 
                                         "rxn_lose_h": r["rxn_lose_h"],
                                         "direction": "gain_h", 
-                                        "protonated_atom": changed_atom, 
+                                        "reactant_atom": parent, 
+                                        "product_atom": child, 
                                         "rxn_1hot_encoding": self._one_hot(size, i),
                                         "ml_pka": None,
                                         "averaged": False})
 
             temp_backward = self.convert_all_single_sites(mol, r["rxn_lose_h"])
 
-            for m in temp_backward:
-                smi = Chem.MolToSmiles(m, canonical=True) 
+            for m, parent, child in temp_backward:
 
+                smi = Chem.MolToSmiles(m, canonical=True) 
                 if smi not in seen_smiles:
                     seen_smiles.add(smi)
-                    changed_atom = self.find_protonation_site_with_mcs(mol, m)
 
                     reacted_mols.append({"original": mol,
                                         "product":m, 
@@ -428,7 +360,8 @@ class AcidBaseConjugator:
                                         "rxn_gain_h": r["rxn_gain_h"],
                                         "rxn_lose_h": r["rxn_lose_h"], 
                                         "direction": "lose_h", 
-                                        "protonated_atom": changed_atom, 
+                                        "reactant_atom": parent, 
+                                        "product_atom": child, 
                                         "rxn_1hot_encoding": self._one_hot(size, i),
                                         "ml_pka": None,
                                         "averaged": False})
@@ -472,7 +405,7 @@ class AcidBaseConjugator:
         x = pd.concat((desc_df.reset_index(drop=True), expanded_cols.reset_index(drop=True), df["rule_pka"].reset_index(drop=True)), axis=1)
 
 
-        x["charge_diff"] = self._charge_diff(mol, rxn_info["protonated_atom"])
+        x["charge_diff"] = self._charge_diff(mol, rxn_info["reactant_atom"])
 
         # this is needed because that's how the model names it. 
         x.rename({"rule_pka":"base_pka"}, axis=1, inplace=True)
@@ -530,6 +463,31 @@ class AcidBaseConjugator:
                 val = missingVal
             res[nm] = val
         return res
+
+    def _rank_map(self, mol):
+        """canonical rank -> atom index, for aligning identical molecules"""
+        return {r: i for i, r in enumerate(Chem.CanonicalRankAtoms(mol, breakTies=True))}
+
+    def build_pairs(self):
+        seen = set()
+        result = []
+
+        for i, j, ai, aj in self.pair_edges:
+            key = tuple(sorted((i, j)))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # ai belongs to i, aj belongs to j — map to sorted key order
+            lo, hi = key
+            if lo == i:
+                atoms = (ai, aj)
+            else:
+                atoms = (aj, ai)
+
+            result.append(ProtonationPair(pair=key, atom_pairs=atoms))
+
+        return result
     
     def generate_all_protonation_states(self, mol):
         """
@@ -537,74 +495,94 @@ class AcidBaseConjugator:
 
         Returns a list of unique molecules representing all states.
         """
-
-        # use deque 
         queue = deque([mol])
 
-        # track visited
-        seen = set()
-        seen.add(Chem.MolToSmiles(mol, canonical=True))
-
+        root_smi = Chem.MolToSmiles(mol, canonical=True)
+        seen = {root_smi}
+        smi_to_index = {root_smi: 0}
         all_states = [mol]
+        rank_maps = [self._rank_map(mol)]          # parallel to all_states
+
+        pair_edges = []
 
         while queue:
             current = queue.popleft()
+            cur_idx = smi_to_index[Chem.MolToSmiles(current, canonical=True)]
 
             for r in self.pka_reactions:
-
-                ## TODO do rxn_gain_h and rxn_lose_h separately so it can be recorded. 
                 for rxn in (r["rxn_gain_h"], r["rxn_lose_h"]):
-                    products = self.convert_all_single_sites(current, rxn)
+                    for product, parent_atom, child_atom in \
+                            self.convert_all_single_sites(current, rxn):
 
-                    # check what's already generated. 
-                    for p in products:
-                        smi = Chem.MolToSmiles(p, canonical=True)
+                        smi = Chem.MolToSmiles(product, canonical=True)
+
                         if smi not in seen:
                             seen.add(smi)
-                            queue.append(p)
-                            all_states.append(p)
+                            smi_to_index[smi] = len(all_states)
+                            all_states.append(product)
+                            rank_maps.append(self._rank_map(product))
+                            queue.append(product)
 
+                        child_idx = smi_to_index[smi]
+
+                        # translate child_atom from `product` into all_states[child_idx]
+                        prod_ranks = Chem.CanonicalRankAtoms(product, breakTies=True)
+                        stored_atom = rank_maps[child_idx].get(prod_ranks[child_atom])
+                        if stored_atom is None:
+                            continue
+
+                        pair_edges.append((cur_idx, child_idx, parent_atom, stored_atom))
+
+        self.all_states = all_states
+        self.pair_edges = pair_edges
         return all_states
     
     def convert_all_single_sites(self, mol, rxn):
         """
         Returns a list of molecules where the reaction has been applied
-        independently to each matching site.
+        independently to each matching site. Also returns the changed
+        atoms in reactants and products
 
         - Each product has exactly one reacted substructure.
         - Invalid/sanitization-failing products are skipped.
         - If no reaction occurs, returns an empty list.
         """
 
-        nr_react = rxn.GetNumReactantTemplates()
-        nr_prod = rxn.GetNumProductTemplates()
-
-        if nr_react != 1 or nr_prod != 1:
-            raise RuntimeError("reaction must be single reactant -> single product")
-
-        products_list = rxn.RunReactants((mol,))
-
-        valid_products = []
         seen_smiles = set()
 
+        valid_products = []
 
-        for products in products_list:
-            product = products[0] 
-
+        for products in rxn.RunReactants((mol,)):
+            product = products[0]
             try:
                 Chem.SanitizeMol(product)
             except (Chem.AtomValenceException, Chem.KekulizeException):
                 continue
 
-            # Check that only 1 site has changed!
-            changed_atoms = self.find_protonation_site_with_mcs(mol, product)
 
-            if changed_atoms != None:
-                # Remove duplicates (can happen due to symmetry)
-                smi = Chem.MolToSmiles(product, canonical=True)
-                if smi not in seen_smiles:
-                    seen_smiles.add(smi)
-                    valid_products.append(product)
+            # get atom that has changed. 
+            changed = []
+            for atom in product.GetAtoms():
+                if atom.GetAtomicNum() == 1 or not atom.HasProp('react_atom_idx'):
+                    continue
+                p_idx = atom.GetIntProp('react_atom_idx')
+                pa = mol.GetAtomWithIdx(p_idx)
+                if (pa.GetFormalCharge() != atom.GetFormalCharge()
+                        or pa.GetTotalNumHs() != atom.GetTotalNumHs()):
+                    changed.append((p_idx, atom.GetIdx()))
+
+            if len(changed) != 1:
+                print("WARNING: some pKa reactions may have failed.")
+                continue
+            parent_atom, child_atom = changed[0]
+
+            # remove duplicates
+            smi = Chem.MolToSmiles(product, canonical=True)
+            if smi in seen_smiles:
+                continue
+            seen_smiles.add(smi)
+
+            valid_products.append((product, parent_atom, child_atom))
 
         return valid_products
 
