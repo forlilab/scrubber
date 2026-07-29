@@ -435,13 +435,16 @@ def write_and_log(isomer_list, log, counter, writer, failed_mol_writer=None):
             print(get_info_str(counter))
     else:
         counter["failed"] += 1
-        if "exception" in log:
-            print(log["exception"], file=sys.stderr)
-        print("Programming logic error. This should not be reached. Please report on GitHub")
-        print("scrub_and_catch_errors returns (isomer_list_if_ok_else_input, log)")
-        print("and it is expected that log (type dict) has key 'exception' if not returning a list")
-        print("but that didn't happen.")
-
+        print("The output from molscrub is unnexpected - please report on GitHub")
+        print(f"{type(isomer_list)=}")
+        print(f"{log=}")
+        if type(isomer_list) == Chem.Mol:
+            if isomer_list.HasProp("_Name"):
+                print(f"Molecule name: {isomer_list.GetProp('_Name')}")
+            print(f"SMILES: {Chem.MolToSmiles(isomer_list)}")
+            print(f"an 'exception' key was expected in log because a Mol instance was returned instead of a list of Mols")
+        elif type(isomer_list) == list and not len(isomer_list):
+            print(f"the output of Scrub instance is an empty list - this should not have happened - likely bug")
 
 if args.write_failed_mols is not None:
      sdwriter_failures = Chem.SDWriter(args.write_failed_mols)
