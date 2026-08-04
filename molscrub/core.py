@@ -207,7 +207,6 @@ class Scrub:
                     molset.add(mol_out)
             pool = list(molset)
 
-
         if self.do_gen3d:
             output_mol_list = []
             
