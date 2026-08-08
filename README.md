@@ -1,5 +1,5 @@
 
-![Molscrub Logo](molscrub_logo.png)
+![Molscrub Logo](molscrub_logo2.png)
 
 # Molscrub
 Process large numbers of small molecules for docking with AutoDock.
