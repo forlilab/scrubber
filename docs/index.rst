@@ -6,8 +6,6 @@
 MolScrub documentation
 ======================
 
-.. image:: ../molscrub_logo.png
-
 Process large numbers of small molecules for docking with AutoDock. May
 be useful for structure-based modeling in general.
 
@@ -103,3 +101,11 @@ Where "input_mols.smi" can look like this:
    Command Line Options <cli>
    Using the API <api>
    API Modules <modules>
+
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: How it works
+
+    Acid/base conjugation <acidbase>

@@ -31,7 +31,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 
 
-html_logo = "images/scrub_squirrel.png"
+html_logo = "images/logo_v3.png"
 
 
 # -- Options for HTML output -------------------------------------------------
