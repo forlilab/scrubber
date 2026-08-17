@@ -6,8 +6,6 @@
 MolScrub documentation
 ======================
 
-.. image:: ../molscrub_logo3.png
-
 Process large numbers of small molecules for docking with AutoDock. May
 be useful for structure-based modeling in general.
 
