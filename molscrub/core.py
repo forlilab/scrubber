@@ -18,6 +18,7 @@ from .common import UniqueMoleculeContainer
 from .openff_toolkit import EspalomaMinimizer
 from .openff_toolkit import EspalomaCharger, NaglCharger
 from .geometry import gen3d
+from .protonate import enumerate_stereoisomers
 
 import joblib
 import tempfile
@@ -89,6 +90,7 @@ class Scrub:
         tauto_fname=None,
         skip_acidbase=False,
         skip_tautomers=False,
+        do_stereoisomers=False,
         skip_ringfix=False,
         skip_gen3d=False,
         template=None,
@@ -131,6 +133,7 @@ class Scrub:
         self.pka_model = pka_model
         self.model_file = model_file
         self.do_tautomers = not skip_tautomers
+        self.do_stereoisomers=do_stereoisomers
         self.skip_ringfix = (
             skip_ringfix  # not avoiding negative to pass directly to gen3d
         )
@@ -204,6 +207,25 @@ class Scrub:
             molset = UniqueMoleculeContainer()
             for mol in pool:
                 for mol_out in self.tautomerizer(mol):
+                    molset.add(mol_out)
+            pool = list(molset)
+
+        if self.do_stereoisomers:
+            # make a copy of the mols in pool to max sure we are properly detecting unenumerated chiral centers
+            p = Chem.SmilesParserParams()
+            p.removeHs=False
+            tmp_pool = []
+            for mol in pool:
+                props = mol.GetPropsAsDict(includePrivate=True)
+                mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+                for prop, v in props.items():
+                    mol.SetProp(prop, v)
+                tmp_pool.append(mol)
+            pool = tmp_pool
+            # done with RDKit nonsense, do the actual enumeration
+            molset = UniqueMoleculeContainer()
+            for mol in pool:
+                for mol_out in enumerate_stereoisomers(mol):
                     molset.add(mol_out)
             pool = list(molset)
 

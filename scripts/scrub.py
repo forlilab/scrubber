@@ -231,6 +231,7 @@ basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", act
 basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 basic.add_argument("--keep_all_frags", help="Keeps all mol fragments (default is to keep largest only)", action="store_true")
+basic.add_argument("--do_stereoisomers", help="enumerate stereoisomers, including those created by acid/base or tautomerization", action="store_true")
 
 misc = parser.add_argument_group("miscellaneous")
 misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
@@ -249,6 +250,7 @@ acidbase.add_argument("--pka_model", default="rules", choices=["rules", "etr1"],
                       "\"rules\" uses predetermined set of pka reactions for protonation.\n" +
                       "etr1 is an ML model for pKa determination " 
                       )
+
 
 geom = parser.add_argument_group("3D coordinates")
 
@@ -378,6 +380,7 @@ scrub = Scrub(
     tauto_fname=args.tauto_fname,
     skip_acidbase=args.skip_acidbase,
     skip_tautomers=args.skip_tautomers,
+    do_stereoisomers=args.do_stereoisomers,
     skip_ringfix=args.skip_ringfix,
     skip_gen3d=args.skip_gen3d,
     template=template_mol,

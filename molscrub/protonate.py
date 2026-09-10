@@ -19,6 +19,11 @@ from itertools import combinations
 from typing import TypedDict
 from rdkit.Chem.rdChemReactions import ChemicalReaction
 import numpy.typing as npt
+from rdkit.Chem.EnumerateStereoisomers import (
+    EnumerateStereoisomers,
+    StereoEnumerationOptions,
+    GetStereoisomerCount,
+)
 
 
 
