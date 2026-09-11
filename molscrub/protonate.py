@@ -723,6 +723,33 @@ def react_and_sanitize(mol, rxn):
     return output_products
 
 
+def enumerate_stereoisomers(input_mol, unassigned_only=True, max_results=32, debug=False) -> list:
+        """
+        source https://www.rdkit.org/docs/source/rdkit.Chem.EnumerateStereoisomers.html
+        """
+        opts = StereoEnumerationOptions(
+            unique=True,
+            tryEmbedding=False,
+            onlyUnassigned=unassigned_only,
+            maxIsomers=max_results,
+        )
+        isomers = UniqueMoleculeContainer([input_mol])
+        output = UniqueMoleculeContainer()
+        # process results and register the information of this transformation
+        for m in isomers:
+            if debug:
+                print("[VERBOSE] processing molecule", Chem.MolToSmiles(m))
+            for ent in EnumerateStereoisomers(m, options=opts):
+                if debug:
+                    print(f"Made enantiomer {Chem.MolToSmiles(ent)}")
+                output.add(ent)
+
+        output = list(output)
+        for mol in output:
+            copy_mol_props(input_mol, mol)
+
+        return output
+
 def convert_recursive(mol, rxn, container):
     for product in react_and_sanitize(mol, rxn):
         container.add(product)

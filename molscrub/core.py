@@ -225,7 +225,7 @@ class Scrub:
             # done with RDKit nonsense, do the actual enumeration
             molset = UniqueMoleculeContainer()
             for mol in pool:
-                for mol_out in enumerate_stereoisomers(mol):
+                for mol_out in enumerate_stereoisomers(mol, debug=self.debug):
                     molset.add(mol_out)
             pool = list(molset)
 
