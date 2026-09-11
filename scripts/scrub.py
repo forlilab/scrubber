@@ -13,17 +13,17 @@ import sys
 from molscrub import Scrub
 from molscrub import SMIMolSupplierWrapper
 from molscrub.core import load_model
-from molscrub.storage import read_spreadsheet
 
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
-
+from rich.console import Console
 
 Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
                                 Chem.PropertyPickleOptions.PrivateProps)
 RDLogger.DisableLog("rdApp.*")
 
+console = Console()
 
 try:
     import h5py
@@ -218,7 +218,7 @@ def get_info_str(counter):
 parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", 
                                  add_help=False, formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles/.csv/.xlsx/.cdxml) or SMILES string")
+parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles) or SMILES string")
 
 basic = parser.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
@@ -231,7 +231,6 @@ basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", act
 basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 basic.add_argument("--keep_all_frags", help="Keeps all mol fragments (default is to keep largest only)", action="store_true")
-basic.add_argument("--column", help="if input is .csv or .xlsx, specify which column contains the SMILES (default = 0)", default=0, type=int)
 
 misc = parser.add_argument_group("miscellaneous")
 misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
@@ -293,10 +292,6 @@ elif extension == ".smi" or extension == ".smiles":
     supplier = SMIMolSupplierWrapper(args.input)
 elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
-elif extension == ".csv" or extension == ".xlsx":
-    supplier = read_spreadsheet(args.input, args.column)
-elif extension == "cdxml":
-    supplier = list(Chem.MolsFromCDXMLFile(args.input))
 else:
     mol = Chem.MolFromSmiles(args.input)
     if mol is None:
@@ -371,7 +366,8 @@ else:
     model_file = None
  
 if args.ff == "espaloma": 
-    print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n")
+    console.print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n", 
+                  style="bold red")
 
 scrub = Scrub(
     ph_low,
