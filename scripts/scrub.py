@@ -278,10 +278,25 @@ else:
     print("--ph_low and --ph_high work together, either use both or none.")
     sys.exit()
 
+# openpyxl is needed by pandas to open excel xlsx files
+def _exit_if_openpyxl_unavailable():
+    try:
+        import openpyxl
+    except ImportError as e:
+        if e.name == "openpyxl":
+            print("\ninstall package openpyxl to open .xlsx files\n")
+            print("available either from conda-forge:")
+            print("  micromamba install -c conda-forge openpyxl")
+            print("or alternatively from PyPI")
+            print("  pip install openpyxl")
+        else:
+            raise e  # import error not from openpyxl, expose traceback
+        is_available = False
+        sys.exit()
+    return
 
 # input
 extension = pathlib.Path(args.input).suffix
-print(f"{extension=}")
 if extension == ".sdf":
     # as of rdkit 2025.09.3, removeHs=True in the MolFromMolBlock code path
     # adds explicit Hs, while Chem.RemoveHs does not. The explicit Hs
@@ -294,7 +309,10 @@ elif extension == ".smi" or extension == ".smiles":
     supplier = SMIMolSupplierWrapper(args.input)
 elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
-elif extension == ".csv" or extension == ".xlsx":
+elif extension == ".csv":
+    supplier = read_spreadsheet(args.input, args.column)
+elif extension == ".xlsx":
+    _exit_if_openpyxl_unavailable()
     supplier = read_spreadsheet(args.input, args.column)
 elif extension == ".cdxml" or extension == ".cdx":
     supplier = list(Chem.MolsFromCDXMLFile(args.input))
