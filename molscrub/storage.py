@@ -1,6 +1,37 @@
 import multiprocessing
 
 from rdkit import Chem
+import pandas as pd
+import pathlib
+
+
+def read_spreadsheet(filename: str,
+        sanitize: bool = True,
+        dropNone = True,
+        colNum: int = 0):
+    """
+    Read CSV or XLSX files with SMILES
+    and return list of mols.
+    """
+    extension = pathlib.Path(filename).suffix
+
+    if extension == ".csv":
+        smiles_pd = pd.read_csv(filename, 
+                                usecols=[colNum], 
+                                skip_blank_lines=True, 
+                                names=["smiles"], 
+                                header=0)
+    elif extension == ".xlsx":
+        smiles_pd = pd.read_excel(filename, usecols=[colNum], names=["smiles"], header=0)
+        smiles_pd = smiles_pd.dropna(how="all")
+
+    mol_list = smiles_pd["smiles"].apply(lambda x: Chem.MolFromSmiles(x, sanitize=sanitize))
+
+    if dropNone:
+        mol_list = mol_list.dropna()
+
+    return mol_list.to_list()
+    
 
 class SMIMolSupplierWrapper:
     """RDKit SMI molecule supplier wrapper."""

@@ -13,17 +13,17 @@ import sys
 from molscrub import Scrub
 from molscrub import SMIMolSupplierWrapper
 from molscrub.core import load_model
+from molscrub.storage import read_spreadsheet
 
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdMolInterchange
-from rich.console import Console
+
 
 Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.MolProps |
                                 Chem.PropertyPickleOptions.PrivateProps)
 RDLogger.DisableLog("rdApp.*")
 
-console = Console()
 
 try:
     import h5py
@@ -218,7 +218,7 @@ def get_info_str(counter):
 parser = argparse.ArgumentParser(description="Protonate molecules and add 3D coordinates", 
                                  add_help=False, formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles) or SMILES string")
+parser.add_argument("input", help="input filename (.sdf/.mol/.smi/.smiles/.cxsmiles/.csv/.xlsx/.cdxml) or SMILES string")
 
 basic = parser.add_argument_group("options")
 basic.add_argument("-o", "--out_fname", help="output filename (.sdf/.hdf5)", required=True)
@@ -231,6 +231,7 @@ basic.add_argument("--skip_tautomers", help="skip enumeration of tautomers", act
 basic.add_argument("--skip_ringfix", help="skip fixes of six-member rings", action="store_true")
 basic.add_argument("--skip_gen3d", help="skip generation of 3D coordinates (also skips ring fixes)", action="store_true")
 basic.add_argument("--keep_all_frags", help="Keeps all mol fragments (default is to keep largest only)", action="store_true")
+basic.add_argument("--column", help="if input is .csv or .xlsx, specify which column contains the SMILES (default = 0)", default=0, type=int)
 
 misc = parser.add_argument_group("miscellaneous")
 misc.add_argument("--cpu", help="number of processes to run in parallel", default=0, type=int)
@@ -277,6 +278,22 @@ else:
     print("--ph_low and --ph_high work together, either use both or none.")
     sys.exit()
 
+# openpyxl is needed by pandas to open excel xlsx files
+def _exit_if_openpyxl_unavailable():
+    try:
+        import openpyxl
+    except ImportError as e:
+        if e.name == "openpyxl":
+            print("\ninstall package openpyxl to open .xlsx files\n")
+            print("available either from conda-forge:")
+            print("  micromamba install -c conda-forge openpyxl")
+            print("or alternatively from PyPI")
+            print("  pip install openpyxl")
+        else:
+            raise e  # import error not from openpyxl, expose traceback
+        is_available = False
+        sys.exit()
+    return
 
 # input
 extension = pathlib.Path(args.input).suffix
@@ -292,6 +309,13 @@ elif extension == ".smi" or extension == ".smiles":
     supplier = SMIMolSupplierWrapper(args.input)
 elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
+elif extension == ".csv":
+    supplier = read_spreadsheet(args.input, args.column)
+elif extension == ".xlsx":
+    _exit_if_openpyxl_unavailable()
+    supplier = read_spreadsheet(args.input, args.column)
+elif extension == ".cdxml" or extension == ".cdx":
+    supplier = list(Chem.MolsFromCDXMLFile(args.input))
 else:
     mol = Chem.MolFromSmiles(args.input)
     if mol is None:
@@ -366,8 +390,7 @@ else:
     model_file = None
  
 if args.ff == "espaloma": 
-    console.print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n", 
-                  style="bold red")
+    print("\n :warning: Note that espaloma may produce unphysical geometries if the starting structure is wrong\n")
 
 scrub = Scrub(
     ph_low,
