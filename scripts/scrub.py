@@ -281,6 +281,7 @@ else:
 
 # input
 extension = pathlib.Path(args.input).suffix
+print(f"{extension=}")
 if extension == ".sdf":
     # as of rdkit 2025.09.3, removeHs=True in the MolFromMolBlock code path
     # adds explicit Hs, while Chem.RemoveHs does not. The explicit Hs
@@ -295,7 +296,7 @@ elif extension == ".cxsmiles":
     supplier = SMIMolSupplierWrapper(args.input, is_enamine_cxsmiles=True, titleLine=True)
 elif extension == ".csv" or extension == ".xlsx":
     supplier = read_spreadsheet(args.input, args.column)
-elif extension == "cdxml":
+elif extension == ".cdxml" or extension == ".cdx":
     supplier = list(Chem.MolsFromCDXMLFile(args.input))
 else:
     mol = Chem.MolFromSmiles(args.input)
